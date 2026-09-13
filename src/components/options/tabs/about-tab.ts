@@ -12,14 +12,6 @@ const TEMPLATE = /* html */ `
     >
       Interactive Tour
     </button>
-    <button
-      id="getAppButton"
-      onclick="window.Services.AppOffer.open()"
-      data-tip="Install the Generator on your computer"
-      style="flex: 1; border: 1px solid var(--header);"
-    >
-      Desktop App
-    </button>
   </div>
   <p>
     <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank">Fantasy Map Generator</a> is an

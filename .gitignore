@@ -12,11 +12,4 @@
 /memory
 .github/agents/bmad-*
 .github/prompts/bmad-*
-.serena/project.yml
-/dist-electron
-/release
 .DS_Store
-
-# nix build output
-/result
-/result-*
