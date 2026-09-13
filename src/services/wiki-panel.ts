@@ -86,6 +86,10 @@ function injectStyles(): void {
 }
 
 export function initWikiPanel(): void {
+  // The wiki now embeds the map the same way (see src/wiki-main.ts's map panel) — if this page is
+  // itself running inside that embed, skip adding a second, nested wiki button/panel.
+  if (window.self !== window.top) return;
+
   injectStyles();
 
   const button = document.createElement("button");

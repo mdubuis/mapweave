@@ -407,6 +407,19 @@ function initToolbar(): void {
   el<HTMLElement>("graph-panel").addEventListener("click", event => {
     if (event.target === el<HTMLElement>("graph-panel")) el<HTMLElement>("graph-panel").setAttribute("hidden", "");
   });
+
+  const mapFrame = el<HTMLIFrameElement>("map-panel-frame");
+  let mapFrameLoaded = false;
+  el<HTMLButtonElement>("toggle-map-btn").addEventListener("click", () => {
+    if (!mapFrameLoaded) {
+      mapFrame.src = "./index.html";
+      mapFrameLoaded = true;
+    }
+    el<HTMLElement>("map-panel").removeAttribute("hidden");
+  });
+  el<HTMLButtonElement>("map-panel-close").addEventListener("click", () => {
+    el<HTMLElement>("map-panel").setAttribute("hidden", "");
+  });
 }
 
 window.addEventListener("hashchange", render);

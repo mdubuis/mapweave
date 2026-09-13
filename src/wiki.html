@@ -11,6 +11,7 @@
       <aside id="sidebar">
         <div id="wiki-header">
           <h1><a href="#/">Mapweave Wiki</a></h1>
+          <button id="toggle-map-btn" type="button">View Map</button>
           <button id="open-folder-btn" type="button">Open wiki folder…</button>
           <span id="live-indicator"></span>
         </div>
@@ -22,6 +23,13 @@
       <main id="content"></main>
       <div id="graph-panel" hidden>
         <svg id="graph-svg"></svg>
+      </div>
+      <div id="map-panel" hidden>
+        <div id="map-panel-header">
+          <span>Map</span>
+          <button id="map-panel-close" type="button" aria-label="Close">✕</button>
+        </div>
+        <iframe id="map-panel-frame" title="Mapweave Map"></iframe>
       </div>
     </div>
     <script type="module" src="./wiki-main.ts"></script>
