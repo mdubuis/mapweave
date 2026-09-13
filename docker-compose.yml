@@ -1,0 +1,19 @@
+# Local-only Postgres/PostGIS for the Mapweave migration (see MIGRATION.md). No auth beyond the
+# default local credentials below — this is explicitly a single-user, local-only deployment.
+services:
+  postgres:
+    image: docker.io/postgis/postgis:16-3.4
+    container_name: mapweave-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mapweave
+      POSTGRES_PASSWORD: mapweave
+      POSTGRES_DB: mapweave
+    ports:
+      - "5432:5432"
+    volumes:
+      - mapweave-postgres-data:/var/lib/postgresql/data
+      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro,Z
+
+volumes:
+  mapweave-postgres-data:

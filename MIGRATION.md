@@ -35,7 +35,7 @@ Trois recherches approfondies (rendu SVG, persistance/génération, dépendances
 | # | Portée | Dépend de | Risque | Casse l'existant si mal fait | Statut |
 |---|---|---|---|---|---|
 | 0 | Génération manuelle au chargement | rien | Faible | Non — un seul branchement isolé | **Fait** |
-| 1 | Schéma Postgres/PostGIS + ETL one-way (CLI), rien de branché à l'app | Docker | Faible | Non — l'ancien flux `.map` reste intact | À faire |
+| 1 | Schéma Postgres/PostGIS + ETL one-way (CLI), rien de branché à l'app | Docker | Faible | Non — l'ancien flux `.map` reste intact | **Fait** |
 | 2 | Serveur API Node, lecture seule sur Postgres | Phase 1 | Moyen | Non — purement additif | À faire |
 | 3 | Génération portée sur Node, `POST /api/maps` génère côté serveur | Phase 2 | **Élevé** | Seulement si la parité seed-à-seed n'est pas validée | À faire |
 | 4 | Le wiki devient la coquille hôte ; carte intégrée (encore en SVG) ; arborescence live | Phase 2 | Moyen | Oui, au système d'ères et aux `map_ref` — voir plus bas | À faire |
@@ -48,13 +48,19 @@ Le seul point d'auto-génération sans intention explicite est le fallback incon
 
 **Vérification** : ouvrir l'app sans paramètre d'URL et sans carte sauvegardée → écran vide avec bouton, pas de génération auto. `?seed=...`, `?maplink=...`, et "charger la dernière carte" continuent de fonctionner sans changement (ce sont des intentions explicites, elles restent automatiques). Confirmé : `tsc --noEmit`, lint, build, 1018/1018 tests, chargement de la page en local (200, pas d'erreur).
 
-### Phase 1 — Schéma Postgres/PostGIS + validation ETL
+### Phase 1 — Schéma Postgres/PostGIS + validation ETL — **Fait**
 
-`docker-compose.yml` (nouveau fichier) : un service Postgres+PostGIS local, volume local, pas d'authentification. Schéma détaillé plus bas. Script Node one-off qui prend une carte déjà générée (encore via le pipeline client actuel) et réutilise **directement** les quatre exporteurs GeoJSON déjà existants et fonctionnels dans `src/services/io/export.ts` (`saveGeoJsonCells`, `saveGeoJsonRoutes`, `saveGeoJsonRivers`, `saveGeoJsonMarkers`, `saveGeoJsonZones`, plus `connectVertices`/`toGeoCoordinates`) pour insérer en base. Rien dans l'app tournante ne dépend de ceci — phase de validation de schéma pure, sans risque pour `load.ts`/`save.ts`.
+`docker-compose.yml` : un service Postgres+PostGIS local (`docker.io/postgis/postgis:16-3.4`), volume nommé local, pas d'authentification au-delà des identifiants par défaut. Schéma dans `server/db/schema.sql`, appliqué automatiquement au premier démarrage du conteneur. Script d'import `server/scripts/import-map.mjs` (package Node isolé sous `server/`, dépendance `pg` uniquement — aucun impact sur le bundle client).
 
-À trancher pendant cette phase, pas après : pour les géométries fusionnées (contours d'état/province/biome), comparer porter `connectVertices` tel quel vs. insérer les données brutes par cellule et laisser PostGIS fusionner (`ST_Union`) et émettre le GeoJSON (`ST_AsGeoJSON`) à la lecture — moins de code de géométrie à maintenir côté app si PostGIS s'en charge bien.
+**Ajustement fait pendant cette phase, comme prévu** : la piste initiale ("réutiliser directement les 4 exporteurs GeoJSON de `export.ts`") s'est révélée impraticable telle quelle — ces fonctions lisent les globales navigateur (`pack`/`grid`/`options`), importent des modules DOM (tooltips, viewport, fonts) et projettent les coordonnées en pseudo-lon/lat via `toGeoCoordinates`, incompatible avec la décision SRID 0/Cartésien du schéma. La vraie source exploitée à la place : l'export **"Pack Cells" JSON** déjà existant dans le menu Export de l'app (`getPackDataJson()`/`getPackCellsData()` dans `src/services/io/export-json.ts`) — il expose `cells` (avec `v`, l'anneau d'indices de vertex) et `vertices` (coordonnées `[x,y]` brutes, non projetées) plus tous les tableaux d'entités (burgs/states/provinces/cultures/religions/rivers/routes/markers), sans aucune dépendance navigateur. Zéro changement de code source nécessaire pour produire cet export — la fonctionnalité existe déjà.
 
-**Vérification** : générer une carte dans l'app actuelle, l'importer via le script, puis comparer (visuellement via QGIS ou `ST_AsGeoJSON` + un diff) la géométrie importée à l'export GeoJSON existant du menu Export — doivent être identiques.
+**Décision tranchée** : PostGIS fusionne les géométries de territoire lui-même. Le script importe la géométrie brute par cellule dans `map_cells`, puis `UPDATE ... SET geom = ST_Multi(ST_UnaryUnion(ST_Collect(geom))) ... GROUP BY state_id` (idem province/culture/religion) — aucun portage de la logique de traçage de trous de `connectVertices` n'a été nécessaire.
+
+**Validé de bout en bout** avec une fixture synthétique (`server/scripts/fixtures/PackCells.sample.json`, 3 cellules dont 2 adjacentes partageant un état) : les deux cellules adjacentes fusionnent en un seul polygone 2×1 propre (arête interne partagée dissoute), la cellule isolée reste séparée, et une requête `ST_AsGeoJSON` renvoie un `FeatureCollection` directement consommable par `L.geoJSON()` — exactement la mécanique que la Phase 2 exposera via HTTP. Détails et commandes de vérification dans `server/README.md`.
+
+**Piège rencontré et documenté** : sous podman rootless (Fedora), le montage du volume `schema.sql` nécessite le flag SELinux `:Z` (`docker-compose.yml`) — sans lui, Postgres échoue silencieusement à lire le fichier ("Permission denied" visible seulement dans `docker logs`, pas une erreur SQL).
+
+**Reporté sciemment, pas oublié** : les zones (traçage de trous le plus complexe, pas nécessaire pour valider le reste), le meandering des rivières (`Rivers.addMeandering`, rendu en segments droits pour l'instant), et `map_topology.grid` (aucun export de grille utilisé dans ce script).
 
 ### Phase 2 — Serveur API Node, lecture seule
 
@@ -143,6 +149,8 @@ Toutes les colonnes géométrie : SRID 0, indexées GiST. Tables d'entités clé
 - `src/components/layers.ts`, `src/components/zoom.ts`, `src/components/viewbox-events.ts` — API publiques à réimplémenter contre Leaflet (Phase 5).
 - `src/services/url-params.ts`, `src/components/idle-state.ts`, `src/components/lifecycle.ts` (`regeneratePrompt`/`regenerateMap`) — le changement de la Phase 0 (fait).
 - `vite.config.ts` — les deux points d'entrée à fusionner en Phase 4.
+- `docker-compose.yml`, `server/db/schema.sql`, `server/scripts/import-map.mjs`, `server/README.md` — la Phase 1 (fait).
+- `src/services/io/export-json.ts`'s `getPackDataJson()`/`getPackCellsData()` — la source de données réellement utilisée par l'ETL (voir Phase 1), pas les exporteurs GeoJSON de `export.ts`.
 
 ## Notes de risque global
 
