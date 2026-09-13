@@ -17,6 +17,15 @@ export interface TerritoryLayerHandle {
    * first time this layer is shown/hidden, even before `update()` has ever drawn anything into it
    */
   ensurePane(): void;
+  /**
+   * World-space bounding box of one feature, in raw pack coordinates — NOT `element.getBBox()`,
+   * which on a Leaflet-rendered path is in the current pan/zoom's pixel space, not world space.
+   * `L.Path.getBounds()` returns `LatLngBounds`, which under this app's CRS.Simple *is* world space
+   * (lat=y, lng=x, no projection) — old code that positioned things off a rendered element's own
+   * geometry (e.g. a "locate this on the map" highlight) needs this instead, now that the element's
+   * own coordinates are zoom-dependent.
+   */
+  getFeatureBounds(id: number): DOMRect | undefined;
 }
 
 /**
@@ -66,6 +75,18 @@ export function createTerritoryLayer(paneName: string, zIndex: number, idPrefix:
     },
     ensurePane() {
       getFeaturePane(paneName, zIndex);
+    },
+    getFeatureBounds(id) {
+      let bounds: L.LatLngBounds | undefined;
+      geoJsonLayer?.eachLayer(sublayer => {
+        const feature = (sublayer as L.Path & { feature: Feature }).feature;
+        if (feature.properties.id === id) bounds = (sublayer as L.Polygon).getBounds();
+      });
+      if (!bounds) return undefined;
+
+      const x0 = bounds.getWest();
+      const y0 = bounds.getSouth();
+      return new DOMRect(x0, y0, bounds.getEast() - x0, bounds.getNorth() - y0);
     }
   };
 }

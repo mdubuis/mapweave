@@ -24,7 +24,7 @@ import { drawPopulation } from "@/renderers/draw-population";
 import { drawPrecipitation, removePrecipitation } from "@/renderers/draw-precipitation";
 import { drawProvinces } from "@/renderers/draw-provinces";
 import { drawRelief, removeRelief } from "@/renderers/draw-relief-icons";
-import { drawReligions } from "@/renderers/draw-religions";
+import { drawReligions, ensureReligionsPane, eraseReligions } from "@/renderers/draw-religions";
 import { drawRivers } from "@/renderers/draw-rivers";
 import { drawRoutes, removeRoutes } from "@/renderers/draw-routes";
 import { drawScaleBar, removeScaleBar } from "@/renderers/draw-scalebar";
@@ -326,7 +326,14 @@ const mapLayers = [
   }),
   new Layer({ id: "rivers", parent: "viewbox", draw: drawRivers }),
   new Layer({ id: "relief", element: "terrain", parent: "viewbox", draw: drawRelief, erase: removeRelief }),
-  new Layer({ id: "religions", element: "relig", parent: "viewbox", draw: drawReligions }),
+  new Layer({
+    id: "religions",
+    element: "religions-leaflet",
+    parent: "leaflet",
+    draw: drawReligions,
+    erase: eraseReligions,
+    ensurePane: ensureReligionsPane
+  }),
   new Layer({ id: "cultures", element: "cults", parent: "viewbox", draw: drawCultures }),
   new Layer({
     id: "states",

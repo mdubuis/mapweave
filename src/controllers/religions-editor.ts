@@ -18,7 +18,8 @@ import { Controllers } from "@/controllers";
 import { Notes } from "@/generators/notes";
 import type { Religion } from "@/generators/religions-generator";
 import { clearLegend, drawLegend, hasLegend } from "@/renderers/draw-legend";
-import { highlightElement } from "@/renderers/overlays/highlight";
+import { getReligionBounds } from "@/renderers/draw-religions";
+import { highlightArea } from "@/renderers/overlays/highlight";
 import { downloadFile, getArea, getAreaUnit, getFileName } from "@/utils";
 import { abbreviate, debounce, ensureEl, getPointer, isLand, parseTransform, rn, si } from "../utils";
 
@@ -478,12 +479,7 @@ const religionHighlightOn = debounce((event: any) => {
   if (customization) return;
 
   const animate = transition().duration(2000).ease(easeSinIn);
-  select("#relig")
-    .select(`#religion${religionId}`)
-    .raise()
-    .transition(animate)
-    .attr("stroke-width", 2.5)
-    .attr("stroke", "#d0240f");
+  select(`#religion${religionId}`).raise().transition(animate).attr("stroke-width", 2.5).attr("stroke", "#d0240f");
   select("#debug")
     .select(`#religionsCenter${religionId}`)
     .raise()
@@ -497,7 +493,7 @@ function religionHighlightOff(event: any): void {
   const $el = ensureEl("religionsBody").querySelector(`div[data-id='${religionId}']`);
   if ($el) $el.classList.remove("active");
 
-  select("#relig").select(`#religion${religionId}`).transition().attr("stroke-width", null).attr("stroke", null);
+  select(`#religion${religionId}`).transition().attr("stroke-width", null).attr("stroke", null);
   select("#debug").select(`#religionsCenter${religionId}`).transition().attr("r", 2).attr("stroke", null);
 }
 
@@ -508,7 +504,7 @@ function religionChangeColor(this: HTMLElement): void {
   const callback = (newFill: string) => {
     (this as any).fill = newFill;
     pack.religions[religionId].color = newFill;
-    select("#relig").select(`#religion${religionId}`).attr("fill", newFill);
+    Layers.draw("religions");
     select("#debug").select(`#religionsCenter${religionId}`).attr("fill", newFill);
   };
 
@@ -681,8 +677,6 @@ function religionRemovePrompt(this: HTMLElement): void {
 }
 
 function removeReligion(religionId: number): void {
-  select("#relig").select(`#religion${religionId}`).remove();
-  select("#relig").select(`#religion-gap${religionId}`).remove();
   select("#debug").select(`#religionsCenter${religionId}`).remove();
 
   pack.cells.religion.forEach((r: number, i: number) => {
@@ -696,6 +690,10 @@ function removeReligion(religionId: number): void {
       r.origins = (r.origins ?? []).filter((origin: number) => origin !== religionId);
       if (!r.origins.length) r.origins = [0];
     });
+
+  // a Leaflet-backed layer: removing one feature's DOM node directly would desync Leaflet's own
+  // bookkeeping, unlike the old plain-SVG version — a full redraw is the safe way to reflect this
+  Layers.draw("religions");
 
   refreshReligionsEditor();
 }
@@ -960,8 +958,8 @@ function editReligionNote(this: HTMLElement): void {
 
 function highlightReligion(this: HTMLElement): void {
   const religionId = +(this.closest(".states") as HTMLElement).dataset.id!;
-  const el = select("#relig").select(`#religion${religionId}`).node() as Element | null;
-  if (el) highlightElement(el, 4);
+  const box = getReligionBounds(religionId);
+  if (box) highlightArea(box, 4);
 }
 
 function updateLockStatus(this: HTMLElement): void {
