@@ -11,6 +11,40 @@ declare global {
 
 type Tool = "Hill" | "Pit" | "Range" | "Trough" | "Strait" | "Mask" | "Invert" | "Add" | "Multiply" | "Smooth";
 
+export type HeightmapImageLoader = (id: string, cellsX: number, cellsY: number) => Promise<Uint8ClampedArray>;
+
+/** Rasterizes a precreated heightmap PNG to cellsX×cellsY and returns its per-pixel grayscale data */
+function loadHeightmapImageInBrowser(id: string, cellsX: number, cellsY: number): Promise<Uint8ClampedArray> {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+    canvas.width = cellsX;
+    canvas.height = cellsY;
+
+    const img = new Image();
+    img.src = `./heightmaps/${id}.png`;
+    img.onerror = () => reject(new Error(`Could not load heightmap image: ${id}`));
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, cellsX, cellsY);
+      const { data } = ctx.getImageData(0, 0, cellsX, cellsY);
+      canvas.remove();
+      img.remove();
+      resolve(data);
+    };
+  });
+}
+
+let loadHeightmapImage: HeightmapImageLoader = loadHeightmapImageInBrowser;
+
+/**
+ * Swaps the precreated-heightmap image loader — the browser default rasterizes via <canvas>, which
+ * doesn't exist server-side. The server generation harness overrides this with a `sharp`-based
+ * loader before generating; see server/src/generation/browser-shim.ts.
+ */
+export function setHeightmapImageLoader(loader: HeightmapImageLoader): void {
+  loadHeightmapImage = loader;
+}
+
 class HeightmapModule {
   grid: any = null;
   heights: Uint8Array | null = null;
@@ -588,32 +622,17 @@ class HeightmapModule {
     }
   }
 
-  fromPrecreated(graph: GridGraph, id: string, config: MapData["graph"] = options.map.graph): Promise<Uint8Array> {
-    return new Promise(resolve => {
-      // create canvas where 1px corresponds to a cell
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-      const { cellsX, cellsY } = graph;
-      canvas.width = cellsX;
-      canvas.height = cellsY;
-
-      // load heightmap into image and render to canvas
-      const img = new Image();
-      img.src = `./heightmaps/${id}.png`;
-      img.onload = () => {
-        if (!ctx) {
-          throw new Error("Could not get canvas context");
-        }
-        this.heights = this.heights || new Uint8Array(cellsX * cellsY);
-        ctx.drawImage(img, 0, 0, cellsX, cellsY);
-        const imageData = ctx.getImageData(0, 0, cellsX, cellsY);
-        this.setGraph(graph, config);
-        this.getHeightsFromImageData(imageData.data);
-        canvas.remove();
-        img.remove();
-        resolve(this.heights);
-      };
-    });
+  async fromPrecreated(
+    graph: GridGraph,
+    id: string,
+    config: MapData["graph"] = options.map.graph
+  ): Promise<Uint8Array> {
+    const { cellsX, cellsY } = graph; // 1px per cell
+    this.heights = this.heights || new Uint8Array(cellsX * cellsY);
+    const imageData = await loadHeightmapImage(id, cellsX, cellsY);
+    this.setGraph(graph, config);
+    this.getHeightsFromImageData(imageData);
+    return this.heights;
   }
 
   getHeights() {

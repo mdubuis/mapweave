@@ -37,7 +37,7 @@ Trois recherches approfondies (rendu SVG, persistance/génération, dépendances
 | 0 | Génération manuelle au chargement | rien | Faible | Non — un seul branchement isolé | **Fait** |
 | 1 | Schéma Postgres/PostGIS + ETL one-way (CLI), rien de branché à l'app | Docker | Faible | Non — l'ancien flux `.map` reste intact | **Fait** |
 | 2 | Serveur API Node, lecture seule sur Postgres | Phase 1 | Moyen | Non — purement additif | **Fait** |
-| 3 | Génération portée sur Node, `POST /api/maps` génère côté serveur | Phase 2 | **Élevé** | Seulement si la parité seed-à-seed n'est pas validée | À faire |
+| 3 | Génération portée sur Node, `POST /api/maps` génère côté serveur | Phase 2 | **Élevé** | Seulement si la parité seed-à-seed n'est pas validée | **Fait*** |
 | 4 | Le wiki devient la coquille hôte ; carte intégrée (encore en SVG) ; arborescence live | Phase 2 | Moyen | Oui, au système d'ères et aux `map_ref` — voir plus bas | À faire |
 | 5 | Migration Leaflet, incrémentale, couche par couche | Phase 3 + Phase 4 | **Le plus élevé** (~85-90 fichiers) | Outils interactifs (règle, minimap, labels) les plus exposés | À faire |
 | 6 | Retrait du format legacy pour les *nouvelles* cartes seulement | Phase 3 | Faible | Non si bien scopé | À faire |
@@ -72,19 +72,27 @@ Endpoints (voir `server/README.md` pour le détail) : `GET /api/maps`, `POST /ap
 
 **Bug réel trouvé et corrigé pendant la vérification** : l'arborescence d'entités groupait un burg via `province_id ?? state_id` (coalescence nulle) tout en *choisissant* le groupe via un test de vérité (`province_id ? ... : ...`) — comme FMG utilise `0` comme sentinelle "pas de province" (pas `null`), un burg avec `province_id: 0` choisissait le bon groupe (état) mais était ensuite indexé par `0` au lieu de l'id d'état réel, disparaissant silencieusement de l'arborescence. Corrigé pour utiliser un seul test de vérité cohérent pour le choix du groupe et la clé.
 
-### Phase 3 — Portage de la génération sur Node
+### Phase 3 — Portage de la génération sur Node — **Fait*** (*une vérification reste à faire par un humain, voir plus bas)
 
-Le risque le plus concentré du plan, mais plus petit qu'attendu : sur 46 fichiers dans `src/generators/`, un seul point d'API navigateur est réellement sur le chemin du pipeline — `heightmap-generator.ts`'s `fromPrecreated()` (Canvas/Image/getImageData, pour les ~23 heightmaps pré-créées) — à remplacer par `sharp` (redimensionner + lire le buffer de pixels côté serveur, sans Canvas du tout). Les ~42 autres fichiers n'utilisent que le pattern `window.X = ...` (trivial en `globalThis.X = ...`) et sont du calcul pur. `alea` (PRNG à seed) fonctionne identiquement sous Node.
+Confirmé exactement comme prévu : sur 46 fichiers dans `src/generators/`, un seul point d'API navigateur était réellement sur le chemin du pipeline (`heightmap-generator.ts`'s `fromPrecreated()`), et le reste tourne **sans aucune modification** — le vrai moteur de génération client, pas une réécriture. Une carte complète (8462 cellules, 1117 burgs, 13 états, simulation économique complète) se génère en ~2 secondes sous Node.
 
-`src/generators/pipeline.ts`'s `Pipeline<Id, TContext>` est déjà générique et portable tel quel — une invocation serveur est littéralement `new Pipeline(...).run(context)`. Il faut un équivalent serveur mince à `generate()` (`src/components/lifecycle.ts`) qui résout une requête HTTP en ce même `context`, puis persiste le résultat via la logique d'import de la Phase 1 (appelée en interne, pas par upload).
+**Le seul changement réel apporté à `src/`** : `fromPrecreated()` utilisait `<canvas>`/`Image`, absents sous Node. Rendu le chargeur d'image remplaçable (`setHeightmapImageLoader`, comportement navigateur par défaut inchangé) avec une implémentation serveur basée sur `sharp` (`server/src/generation/heightmap-image-loader.ts`). **Mise en garde documentée, pas cachée** : l'algorithme de redimensionnement de sharp/libvips n'est pas garanti identique pixel-à-pixel à celui du Canvas navigateur — seuls les templates de heightmap **pré-créés** (à base d'image) portent ce risque de divergence marginale ; les templates procéduraux (calcul pur) sont inchangés et identiques bit-à-bit.
 
-**Test d'acceptation obligatoire, pas optionnel** : générer la même seed côté client (ancien chemin) et côté serveur (nouveau chemin), diff `pack`/`grid` — doivent être identiques bit-à-bit avant de faire confiance à la génération serveur pour quoi que ce soit de réel.
+**Deux dépendances non-évidentes découvertes seulement en exécutant réellement le code** (invisibles à la simple lecture des imports) :
+- `aleaPRNG` (le PRNG à seed) n'est PAS un export ES module — c'est `window.aleaPRNG` posé par un **`<script>` classique vendorisé** (`public/libs/alea.min.js`), invisible à toute analyse par imports. Résolu en utilisant le paquet npm `alea` (même algorithme, déjà une dépendance utilisée directement par plusieurs générateurs).
+- `FlatQueue` (utilisé par l'expansion des cultures/états) est le même genre de global vendorisé (`public/libs/flatqueue.js`) — mais ce fichier est UMD et détecte CommonJS, donc le fichier exact utilisé par le navigateur se charge ici sans modification via un simple import relatif.
 
-**Mise en garde à ne pas perdre en route** : `ErasePipeline` et les chemins Keep/Risk/Resample de l'éditeur de heightmap mutent `pack`/`grid` *en dehors* du pipeline déclaré. Dans cette phase, seul le pipeline complet tourne côté serveur ; les retouches partielles de heightmap restent côté client jusqu'à une phase de suivi dédiée — à traiter explicitement comme hors-scope, pas comme un oubli.
+`src/generators/pipeline.ts`'s `Pipeline<Id, TContext>` s'est révélé portable tel quel. L'équivalent serveur mince à `generate()` (`server/src/generation/generate.ts`) résout une requête en seed/taille/densité, lance le pipeline, puis `packToJson()` (`server/src/generation/pack-to-json.ts`) convertit le `pack` vivant dans la même forme que consomme déjà `importPack()` de la Phase 1 — aucune logique dupliquée.
 
-Garder la génération client existante en place (pas supprimée), derrière un flag, jusqu'à validation complète de la parité.
+**Concurrence** : la génération mute des globales partagées (`pack`/`grid`/`options`) — deux générations ne peuvent pas tourner en parallèle dans le même process sans se corrompre. L'endpoint API sérialise via une file de promesses (`server/src/routes/maps.mjs`) plutôt que d'exécuter en parallèle — suffisant en local mono-utilisateur.
 
-**Vérification** : test de parité seed-à-seed ci-dessus ; `POST /api/maps` avec plusieurs seeds/tailles de carte différentes, vérifier temps de réponse acceptable (pas de file d'attente prévue à ce stade, génération synchrone).
+**Vérifié directement** :
+- **Déterminisme** : la même seed générée deux fois côté serveur produit une sortie identique bit-à-bit.
+- **Bout en bout réel** : `npm run generate` sur une carte pleine taille, importée proprement et interrogeable via chaque endpoint de la Phase 2, géométries de territoire et de routes valides.
+- **Un second bug réel**, trouvé uniquement en testant avec de vraies données générées (pas la fixture synthétique) : les entrées `points` des rivières/routes de FMG sont des triplets `[x, y, cellId]` (un id de cellule embarqué, pas une coordonnée Z) — GeoJSON lit une coordonnée à 3 éléments comme XYZ, ce que les colonnes PostGIS 2D rejetaient ("Geometry has Z dimension but column does not"). Corrigé en tronquant à `[x, y]`.
+- **Requêtes concurrentes** : deux appels `POST /api/maps/generate` simultanés avec des seeds différentes se terminent avec des résultats corrects et indépendants — la file de sérialisation fonctionne.
+
+**Ce qui reste à faire par un humain** (le projet ne lance jamais de vrai navigateur automatiquement) : `server/scripts/compare-with-browser.ts` compare une génération serveur à un export réel du navigateur pour la même seed/taille — c'est la seule étape de vérification du plan qui nécessite un navigateur réel. Voir `server/README.md` pour la commande exacte. Tout le reste ci-dessus a été vérifié directement.
 
 ### Phase 4 — Le wiki devient la coquille hôte ; arborescence live
 
@@ -156,6 +164,8 @@ Toutes les colonnes géométrie : SRID 0, indexées GiST. Tables d'entités clé
 - `docker-compose.yml`, `server/db/schema.sql`, `server/scripts/import-map.mjs`, `server/README.md` — la Phase 1 (fait).
 - `server/src/import.mjs`, `server/src/db.mjs`, `server/src/routes/maps.mjs`, `server/src/server.mjs` — la Phase 2 (fait).
 - `src/services/io/export-json.ts`'s `getPackDataJson()`/`getPackCellsData()` — la source de données réellement utilisée par l'ETL (voir Phase 1), pas les exporteurs GeoJSON de `export.ts`.
+- `server/src/generation/browser-shim.ts`, `generate.ts`, `pack-to-json.ts`, `heightmap-image-loader.ts`, `server/scripts/generate-map.ts`, `compare-with-browser.ts` — la Phase 3 (fait).
+- `src/generators/heightmap-generator.ts` — seul fichier de `src/` modifié pour la Phase 3 (chargeur d'image rendu remplaçable, comportement navigateur inchangé).
 
 ## Notes de risque global
 

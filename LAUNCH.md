@@ -68,6 +68,19 @@ http://127.0.0.1:3001/api/maps/1/entities/tree      # states → provinces → b
 Full endpoint list and what's deliberately not imported yet (zones, river meandering, grid
 topology) in `server/README.md`.
 
+**Generate a map server-side** (Phase 3 — the real generation engine, running under Node, no
+browser needed):
+
+```bash
+npm run generate -- --seed my-world --width 1280 --height 800 --density 4 --name "My World"
+```
+
+This generates and imports in one step. `density` is the same graph-size slider step as the app's
+own UI (0 = 1000 points ... 4 = 10000 default ... 12 = 100000). To actually confirm a server run
+matches a browser run for the same seed (the one check that needs a real browser — see
+`server/README.md`'s Phase 3 section for why), generate that seed/size in the running app, export
+**Pack Cells JSON**, then `npx tsx scripts/compare-with-browser.ts --seed ... --pack ...`.
+
 ## 3. Try the map app changes (Phase 3/4)
 
 - **Wiki links on map entities**: click any burg on the map (opens the Burg Editor) — there's a new

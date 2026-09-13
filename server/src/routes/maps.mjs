@@ -1,5 +1,16 @@
 import { pool, withTransaction } from "../db.mjs";
+import { generateMap } from "../generation/generate.ts";
 import { importPack } from "../import.mjs";
+
+// generateMap() mutates process-wide globals (pack/grid/options) — concurrent calls would corrupt
+// each other's result, so requests are serialized through this promise chain instead of running in
+// parallel. Fine for a local single-user server; would need a real queue for anything more.
+let generationQueue = Promise.resolve();
+function runGeneration(request) {
+  const result = generationQueue.then(() => generateMap(request));
+  generationQueue = result.catch(() => {}); // one failed generation must not wedge the queue
+  return result;
+}
 
 // Per-layer table/column config for the GeoJSON endpoint — the :layer path param is validated
 // against these keys before use, so nothing here is built from unsanitized user input.
@@ -32,6 +43,13 @@ export default async function mapsRoutes(app) {
     if (!pack) return reply.code(400).send({ error: "Body must include a `pack` field (a Pack Cells JSON export)" });
 
     const result = await withTransaction(client => importPack(client, { packExport: pack, settingsExport: settings, name }));
+    return reply.code(201).send(result);
+  });
+
+  app.post("/api/maps/generate", async (request, reply) => {
+    const { seed, width, height, density, name } = request.body ?? {};
+    const packExport = await runGeneration({ seed, width, height, density });
+    const result = await withTransaction(client => importPack(client, { packExport, name }));
     return reply.code(201).send(result);
   });
 

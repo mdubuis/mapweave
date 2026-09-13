@@ -16,7 +16,9 @@ function pointGeoJSON(x, y) {
 }
 
 function lineStringGeoJSON(points) {
-  return JSON.stringify({ type: "LineString", coordinates: points });
+  // FMG's river/route `points` entries can carry a 3rd element (a cell id, not a Z coordinate) —
+  // GeoJSON treats a 3-element coordinate as XYZ, which a 2D PostGIS column then rejects.
+  return JSON.stringify({ type: "LineString", coordinates: points.map(([x, y]) => [x, y]) });
 }
 
 async function importCells(client, mapId, data) {
