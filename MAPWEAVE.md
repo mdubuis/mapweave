@@ -1,5 +1,7 @@
 # Mapweave — vision & roadmap
 
+For a hands-on walkthrough of running the app and trying out what's built so far, see `LAUNCH.md`.
+
 This fork of Azgaar's Fantasy Map Generator is being extended into a worldbuilding platform. FMG's own conventions (CONTEXT.md, CLAUDE.md/AGENTS.md, docs/) still apply to everything under `src/` — this file only adds the layer above them. Three pillars:
 
 1. **Map** — the existing FMG procedural engine (Voronoi, hydrology, climate, cultures), kept as a reliable black box. Do not rewrite the generation pipeline; build on top of it.
