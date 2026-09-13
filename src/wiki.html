@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mapweave Wiki</title>
+    <link rel="stylesheet" href="./wiki.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div id="wiki-header">
+          <h1><a href="#/">Mapweave Wiki</a></h1>
+          <button id="open-folder-btn" type="button">Open wiki folder…</button>
+          <span id="live-indicator"></span>
+        </div>
+        <input id="search" type="search" placeholder="Filter entities…" />
+        <nav id="entity-list"></nav>
+        <button id="toggle-graph-btn" type="button">Show graph</button>
+      </aside>
+      <main id="content"></main>
+      <div id="graph-panel" hidden>
+        <svg id="graph-svg"></svg>
+      </div>
+    </div>
+    <script type="module" src="./wiki-main.ts"></script>
+  </body>
+</html>

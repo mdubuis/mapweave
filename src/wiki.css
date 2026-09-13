@@ -1,0 +1,210 @@
+:root {
+  color-scheme: light dark;
+  --bg: #1b1d22;
+  --bg-alt: #24272e;
+  --fg: #e6e6e6;
+  --muted: #9aa0aa;
+  --border: #383c44;
+  --accent: #4f8ef7;
+  --broken: #f76e6e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100vh;
+}
+
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--bg-alt);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+#wiki-header h1 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+#wiki-header h1 a {
+  color: var(--fg);
+  text-decoration: none;
+}
+#wiki-header button {
+  width: 100%;
+}
+#live-indicator {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+#search {
+  width: 100%;
+  padding: 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+}
+
+.entity-group h2 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0.75rem 0 0.25rem;
+}
+.entity-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.entity-group li a {
+  display: block;
+  padding: 0.25rem 0.4rem;
+  color: var(--fg);
+  text-decoration: none;
+  border-radius: 4px;
+}
+.entity-group li a:hover {
+  background: var(--bg);
+}
+.badge-broken {
+  background: var(--broken);
+  color: #1b1d22;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  padding: 0 5px;
+  margin-left: 4px;
+}
+
+#content {
+  padding: 2rem;
+  overflow-y: auto;
+  max-width: 60rem;
+}
+
+.entity-meta {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.type-badge,
+.map-ref-badge,
+.tag {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.map-ref-badge {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.summary {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.relations ul {
+  padding-left: 1.2rem;
+}
+
+.entity-body a.wiki-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.entity-body a.wiki-link:hover {
+  border-bottom-color: var(--accent);
+}
+.entity-body a.wiki-link-broken,
+.wiki-link-broken {
+  color: var(--broken);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--broken);
+}
+
+.entity-body pre {
+  background: var(--bg-alt);
+  padding: 0.75rem;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.entity-body code {
+  background: var(--bg-alt);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+.entity-body blockquote {
+  border-left: 3px solid var(--border);
+  margin: 0.5rem 0;
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+#editor-textarea {
+  width: 100%;
+  height: 60vh;
+  background: var(--bg-alt);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+.editor-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+#graph-panel {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10;
+}
+#graph-panel[hidden] {
+  display: none;
+}
+#graph-svg {
+  width: 100%;
+  height: 100%;
+}
+#graph-svg text {
+  fill: var(--fg);
+  pointer-events: none;
+}
+
+button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--accent);
+}

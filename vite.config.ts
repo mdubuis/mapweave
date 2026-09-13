@@ -21,7 +21,13 @@ export default ({ mode }: { mode: string }) => ({
   build: {
     outDir: mode === "electron" ? "../dist-electron/renderer" : "../dist",
     assetsDir: "./",
-    emptyOutDir: true // outDir sits outside root, so Vite would otherwise keep every past build's chunks
+    emptyOutDir: true, // outDir sits outside root, so Vite would otherwise keep every past build's chunks
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./src/index.html", import.meta.url)),
+        wiki: fileURLToPath(new URL("./src/wiki.html", import.meta.url))
+      }
+    }
   },
   publicDir: "../public",
   resolve: {
