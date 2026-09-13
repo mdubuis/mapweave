@@ -4,9 +4,11 @@
   "type": "module",
   "description": "Backend for the Mapweave migration (Postgres/PostGIS, see ../MIGRATION.md). Isolated from the client app's package.json — nothing here affects the browser bundle.",
   "scripts": {
-    "import-map": "node scripts/import-map.mjs"
+    "import-map": "node scripts/import-map.mjs",
+    "start": "node src/server.mjs"
   },
   "dependencies": {
+    "fastify": "^5.2.0",
     "pg": "^8.13.1"
   }
 }

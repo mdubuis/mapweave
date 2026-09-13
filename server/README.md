@@ -1,4 +1,4 @@
-# Mapweave server (Phase 1: Postgres/PostGIS schema + ETL)
+# Mapweave server (Phase 1: Postgres/PostGIS schema + ETL; Phase 2: read API)
 
 Local-only Postgres/PostGIS, no auth beyond the default local credentials — see `MIGRATION.md` at
 the repo root for the full migration plan this is part of. Nothing here is wired into the running
@@ -64,11 +64,29 @@ docker exec mapweave-postgres psql -U mapweave -d mapweave -c "SELECT id, name, 
 docker exec mapweave-postgres psql -U mapweave -d mapweave -c "SELECT state_id, name, ST_Area(geom) FROM map_states WHERE map_id = 1;"
 ```
 
-Or fetch a layer as GeoJSON directly (this is exactly what Phase 2's read API will wrap in an HTTP
-endpoint):
+## API server (Phase 2)
 
-```sql
-SELECT json_build_object('type','FeatureCollection','features', json_agg(
-  json_build_object('type','Feature','geometry', ST_AsGeoJSON(geom)::json, 'properties', json_build_object('id', state_id, 'name', name))
-)) FROM map_states WHERE map_id = 1;
+Read-only against Postgres, plus one write endpoint (`/api/maps/import`) that wraps the same import
+logic the CLI uses (`src/import.mjs`, shared by both). Fastify, no auth (local-only, per the plan).
+
+```bash
+npm run start   # listens on http://127.0.0.1:3001 (PORT env var to override)
 ```
+
+| Endpoint | Notes |
+|---|---|
+| `GET /api/maps` | id/name/seed/createdAt for each map |
+| `POST /api/maps/import` | body `{pack, settings?, name?}` — same shape as the CLI's `--pack`/`--settings`/`--name`, but as JSON values instead of file paths |
+| `GET /api/maps/:id` | `meta`/`facts`/`layers`/`style` |
+| `GET /api/maps/:id/layers/:layer` | one GeoJSON `FeatureCollection`; `:layer` ∈ `cells, states, provinces, cultures, religions, burgs, rivers, routes, markers` |
+| `GET /api/maps/:id/entities/tree` | states → provinces → burgs, plus flat cultures/religions/rivers/markers lists |
+| `GET /api/maps/:id/entities/:kind/:entityId` | one entity's row + GeoJSON geometry |
+| `DELETE /api/maps/:id` | cascades to every child table |
+
+All verified manually against the sample fixture (list/get/layers/tree/entity-detail/import/delete,
+plus an unknown-layer 400 and an unknown-map 404). One real bug caught during this: the entities
+tree bucketed a burg by `province_id ?? state_id` (nullish coalescing) while *choosing* the bucket
+with a truthy check (`province_id ? ... : ...`) — since FMG uses `0` as its "no province" sentinel
+(not `null`), a burg with `province_id: 0` picked the state bucket but was then keyed by `0` instead
+of its actual state id, silently vanishing from the tree. Fixed to use one consistent truthy check
+for both the bucket and the key.

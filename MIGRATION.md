@@ -36,7 +36,7 @@ Trois recherches approfondies (rendu SVG, persistance/génération, dépendances
 |---|---|---|---|---|---|
 | 0 | Génération manuelle au chargement | rien | Faible | Non — un seul branchement isolé | **Fait** |
 | 1 | Schéma Postgres/PostGIS + ETL one-way (CLI), rien de branché à l'app | Docker | Faible | Non — l'ancien flux `.map` reste intact | **Fait** |
-| 2 | Serveur API Node, lecture seule sur Postgres | Phase 1 | Moyen | Non — purement additif | À faire |
+| 2 | Serveur API Node, lecture seule sur Postgres | Phase 1 | Moyen | Non — purement additif | **Fait** |
 | 3 | Génération portée sur Node, `POST /api/maps` génère côté serveur | Phase 2 | **Élevé** | Seulement si la parité seed-à-seed n'est pas validée | À faire |
 | 4 | Le wiki devient la coquille hôte ; carte intégrée (encore en SVG) ; arborescence live | Phase 2 | Moyen | Oui, au système d'ères et aux `map_ref` — voir plus bas | À faire |
 | 5 | Migration Leaflet, incrémentale, couche par couche | Phase 3 + Phase 4 | **Le plus élevé** (~85-90 fichiers) | Outils interactifs (règle, minimap, labels) les plus exposés | À faire |
@@ -62,11 +62,15 @@ Le seul point d'auto-génération sans intention explicite est le fallback incon
 
 **Reporté sciemment, pas oublié** : les zones (traçage de trous le plus complexe, pas nécessaire pour valider le reste), le meandering des rivières (`Rivers.addMeandering`, rendu en segments droits pour l'instant), et `map_topology.grid` (aucun export de grille utilisé dans ce script).
 
-### Phase 2 — Serveur API Node, lecture seule
+### Phase 2 — Serveur API Node, lecture seule — **Fait**
 
-Fastify (validation JSON Schema, cohérent avec le modèle de config déjà validé par zod dans le projet). Endpoints de lecture seule (liste des cartes, `meta`/`facts`/`layers`/`style`, GeoJSON par couche, arborescence d'entités). Le client continue de générer côté navigateur comme aujourd'hui ; la seule nouveauté est un endpoint "uploader la carte terminée" qui enveloppe le script d'import de la Phase 1. Ça isole complètement le risque schéma/API du risque, bien plus grand, du portage de la génération (Phase 3).
+Fastify (`server/src/server.mjs`), pas d'authentification (local mono-utilisateur). La logique d'import de la Phase 1 a été extraite dans `server/src/import.mjs` (fonction pure `importPack(client, {...})`, transaction gérée par l'appelant) partagée par le script CLI (`scripts/import-map.mjs`, maintenant un simple wrapper) et le nouvel endpoint `POST /api/maps/import` — aucune logique dupliquée entre les deux chemins.
 
-**Vérification** : `curl` chaque endpoint contre une carte importée en Phase 1 ; le GeoJSON renvoyé doit charger correctement dans un `L.geoJSON()` de test isolé (page HTML jetable, pas encore l'app).
+Endpoints (voir `server/README.md` pour le détail) : `GET /api/maps`, `POST /api/maps/import`, `GET /api/maps/:id`, `GET /api/maps/:id/layers/:layer` (GeoJSON par couche), `GET /api/maps/:id/entities/tree`, `GET /api/maps/:id/entities/:kind/:id`, `DELETE /api/maps/:id` (cascade vérifiée).
+
+**Vérification faite** : chaque endpoint testé manuellement contre la fixture de la Phase 1 (liste, détail, GeoJSON par couche avec un cas de couche inconnue → 400, arborescence, détail d'entité, import via l'API en plus du CLI, suppression avec cascade confirmée sur `map_cells`). Le GeoJSON renvoyé par `/layers/:layer` est directement dans la forme qu'attend `L.geoJSON()`.
+
+**Bug réel trouvé et corrigé pendant la vérification** : l'arborescence d'entités groupait un burg via `province_id ?? state_id` (coalescence nulle) tout en *choisissant* le groupe via un test de vérité (`province_id ? ... : ...`) — comme FMG utilise `0` comme sentinelle "pas de province" (pas `null`), un burg avec `province_id: 0` choisissait le bon groupe (état) mais était ensuite indexé par `0` au lieu de l'id d'état réel, disparaissant silencieusement de l'arborescence. Corrigé pour utiliser un seul test de vérité cohérent pour le choix du groupe et la clé.
 
 ### Phase 3 — Portage de la génération sur Node
 
@@ -150,6 +154,7 @@ Toutes les colonnes géométrie : SRID 0, indexées GiST. Tables d'entités clé
 - `src/services/url-params.ts`, `src/components/idle-state.ts`, `src/components/lifecycle.ts` (`regeneratePrompt`/`regenerateMap`) — le changement de la Phase 0 (fait).
 - `vite.config.ts` — les deux points d'entrée à fusionner en Phase 4.
 - `docker-compose.yml`, `server/db/schema.sql`, `server/scripts/import-map.mjs`, `server/README.md` — la Phase 1 (fait).
+- `server/src/import.mjs`, `server/src/db.mjs`, `server/src/routes/maps.mjs`, `server/src/server.mjs` — la Phase 2 (fait).
 - `src/services/io/export-json.ts`'s `getPackDataJson()`/`getPackCellsData()` — la source de données réellement utilisée par l'ETL (voir Phase 1), pas les exporteurs GeoJSON de `export.ts`.
 
 ## Notes de risque global
