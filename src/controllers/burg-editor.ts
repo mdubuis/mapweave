@@ -9,6 +9,7 @@ import { removeEmblem } from "@/renderers/draw-emblems";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
 import { getHeight, openURL, speak } from "@/utils";
 import { MAX_ZOOM, PAN_ZOOM_IDENTITY, type PanZoom, panBy, zoomAt } from "@/utils/panZoomUtils";
+import { wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import type { Burg } from "../generators/burgs-generator";
 import { convertTemperature, ensureEl, getPointer, getTemperatureLikeness, rand, rn } from "../utils";
 import type { PromptOptions } from "../utils/commonUtils";
@@ -230,6 +231,14 @@ function renderDialog(): void {
           class="icon-map-pin"
         ></button>
         ${Notes.getButton("burglLegend", "this burg")}
+        <a
+          id="burgWikiLink"
+          href="${wikiLinkHref({ kind: "burg", id: getSelectedId(), name: pack.burgs[getSelectedId()].name ?? "" })}"
+          target="_blank"
+          rel="noopener"
+          data-tip="${wikiLinkTip({ kind: "burg", id: getSelectedId(), name: "" })}"
+          class="icon-link-ext pointer"
+        ></a>
         <button id="burgLock" class="icon-lock-open" onmouseover="showElementLockTip(event)"></button>
         <button
           id="burgRemove"

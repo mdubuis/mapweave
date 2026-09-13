@@ -21,6 +21,7 @@ map_ref:                        # optional — links this entity to a map object
   kind: burg
   id: 42
   name: Old Port                # snapshot of the map object's name when linked, for drift-detection
+  # cell: 1337                  # required for non-burg kinds, to jump to this entity on the map
 ---
 ```
 
@@ -37,13 +38,22 @@ happen to link them (e.g. `located_in`, `member_of`, `parent_of`).
 
 ### `map_ref`
 
-Reserved for Phase 3 (map ↔ wiki linking). Links this wiki entity to one object on the generated
-map. `kind` matches FMG's own entity types (`burg`, `state`, `province`, `religion`, `culture`,
-`marker`, `river`); `id` is that object's numeric id in the currently loaded `.map` file. FMG ids
-are positional (array index) and only stable within one map's edit lineage — they are **not**
-stable across a full regeneration. `name` is a snapshot of the map object's name at link time so a
-later mismatch (id now points at a differently-named object) can be flagged instead of silently
-mislinking.
+Links this wiki entity to one object on the generated map, and powers the bidirectional
+map ↔ wiki navigation (Phase 3). `kind` matches FMG's own entity types (`burg`, `state`,
+`province`, `religion`, `culture`, `marker`, `river`); `id` is that object's numeric id in the
+currently loaded `.map` file. FMG ids are positional (array index) and only stable within one
+map's edit lineage — they are **not** stable across a full regeneration. `name` is a snapshot of
+the map object's name at link time so a later mismatch (id now points at a differently-named
+object) can be flagged instead of silently mislinking.
+
+`cell` is the id of the cell to focus on when jumping from this wiki page to the map, reusing
+FMG's native `?cell=<id>` URL parameter (see `docs/wiki/URL-parameters.md`) — required for every
+kind except `burg`, which resolves directly via `?burg=<id>` instead. A state/province/religion's
+`cell` is its `center` field in the map data; a marker's is its own `cell` field; a river's is its
+`mouth` or `source`. Creating a page from a map popup (clicking "Create wiki page" on a burg,
+state, or marker) fills in `kind`/`id`/`name` automatically; the map app resolves the reverse
+direction (map object → wiki page) by scanning all `wiki/**/*.md` files for a matching `map_ref` —
+see `src/wiki/map-link.ts`.
 
 ## Wikilinks
 

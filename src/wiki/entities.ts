@@ -22,10 +22,15 @@ const MAP_REF_KINDS: MapRefKind[] = ["burg", "state", "province", "religion", "c
 
 function toMapRef(value: unknown): MapRef | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const { kind, id, name } = value as Record<string, unknown>;
+  const { kind, id, name, cell } = value as Record<string, unknown>;
   if (typeof kind !== "string" || !MAP_REF_KINDS.includes(kind as MapRefKind)) return undefined;
   if (typeof id !== "number") return undefined;
-  return { kind: kind as MapRefKind, id, name: typeof name === "string" ? name : "" };
+  return {
+    kind: kind as MapRefKind,
+    id,
+    name: typeof name === "string" ? name : "",
+    cell: typeof cell === "number" ? cell : undefined
+  };
 }
 
 function toRelations(value: unknown): Record<string, string> | undefined {

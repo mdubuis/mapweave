@@ -4,6 +4,8 @@ export interface MapRef {
   kind: MapRefKind;
   id: number;
   name: string;
+  /** Cell id to focus on for non-burg kinds (FMG's `?cell=` URL param); burgs resolve via `?burg=<id>` instead */
+  cell?: number;
 }
 
 export interface WikiFrontmatter {

@@ -6,6 +6,7 @@ import { Controllers } from "@/controllers";
 import type { Marker } from "@/generators/markers-generator";
 import { Notes } from "@/generators/notes";
 import { drawMarkers, setEditedMarker } from "@/renderers/draw-markers";
+import { wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import { ensureEl, escapeHtml, findEl, isImageIcon, rn } from "../utils";
 
 let selectedElement: SVGSVGElement;
@@ -93,6 +94,14 @@ function renderDialog(): void {
     </div>
     <div id="markerBottom">
       ${Notes.getButton("markerNotes", "this marker")}
+      <a
+        id="markerWikiLink"
+        href="${wikiLinkHref({ kind: "marker", id: selectedMarker.i, name: selectedMarker.name, cell: selectedMarker.cell })}"
+        target="_blank"
+        rel="noopener"
+        data-tip="${wikiLinkTip({ kind: "marker", id: selectedMarker.i, name: "" })}"
+        class="icon-link-ext pointer"
+      ></a>
       <button id="markerRadius" data-tip="Show markers within a radius of this one" class="icon-dot-circled"></button>
       <button id="markerLock" class="icon-lock-open" onmouseover="showElementLockTip(event)"></button>
       <button id="markerAdd" data-tip="Add additional marker of that type" class="icon-plus"></button>

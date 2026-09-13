@@ -25,7 +25,8 @@ import { clearLegend, drawLegend, hasLegend } from "@/renderers/draw-legend";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
 import { fog, unfog } from "@/renderers/overlays/fogging";
 import { highlightElement, highlightOutline } from "@/renderers/overlays/highlight";
-import { applyOption, downloadFile, getArea, getAreaUnit, getFileName, speak } from "@/utils";
+import { applyOption, downloadFile, getArea, getAreaUnit, getFileName, openURL, speak } from "@/utils";
+import { wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import {
   ensureEl,
   formatPrice,
@@ -135,6 +136,7 @@ const columns: EditorColumn<State>[] = [
     sortBy: s => (s.i ? s.expansionism || 0 : 0)
   },
   { key: "note", width: "1.1em" },
+  { key: "wiki", width: "1.1em" },
   { key: "locate", width: "1.1em" },
   { key: "focus", width: "1.1em" },
   { key: "lock", width: "1.1em" },
@@ -254,6 +256,10 @@ function renderDialog(): void {
     else if (classList.contains("statePopulation")) changePopulation(stateId);
     else if (classList.contains("stateTreasury")) openTreasuryDialog(stateId);
     else if (classList.contains("icon-book")) void Controllers.NotesEditor.open({ type: "state", id: stateId });
+    else if (classList.contains("icon-link-ext"))
+      openURL(
+        wikiLinkHref({ kind: "state", id: stateId, name: pack.states[stateId].name, cell: pack.states[stateId].center })
+      );
     else if (classList.contains("icon-pin")) toggleFog(stateId, classList);
     else if (classList.contains("icon-target"))
       highlightElement(select("#regions").select(`#state${stateId}`).node() as Element, 4);
@@ -364,6 +370,7 @@ function renderStatesPage(view: TableView<State>): void {
           <input class="statePower placeholder" type="number" value="0" />
         </div>
         <div data-col="note"></div>
+        <div data-col="wiki"></div>
         <div data-col="locate"></div>
         <div data-col="focus"></div>
         <div data-col="lock"></div>
@@ -429,6 +436,7 @@ function renderStatesPage(view: TableView<State>): void {
           class="statePower" type="number" min="0" max="99" step=".1" value=${s.expansionism} />
       </div>
       ${Notes.getIcon("this state")}
+      <span data-col="wiki" data-tip="${wikiLinkTip({ kind: "state", id: s.i, name: "" })}" class="icon-link-ext pointer"></span>
       <span data-col="locate" data-tip="Locate the state" class="icon-target"></span>
       <span data-col="focus" data-tip="Toggle state focus" class="icon-pin ${focused ? "" : " inactive"}"></span>
       <span data-col="lock" data-tip="Lock the state to protect it from re-generation" class="icon-lock${

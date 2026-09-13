@@ -17,7 +17,7 @@ import {
 import { buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
 import { buildGraph } from "@/wiki/graph";
 import { renderMarkdown } from "@/wiki/markdown";
-import type { EdgeKind, WikiEntity, WikiGraph } from "@/wiki/types";
+import type { EdgeKind, MapRef, MapRefKind, WikiEntity, WikiGraph } from "@/wiki/types";
 
 let entities: WikiEntity[] = loadEntities();
 let graph: WikiGraph = buildGraph(entities);
@@ -30,14 +30,24 @@ const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as
 const byslug = (slug: string) => entities.find(e => e.slug === slug);
 const resolveLink = (target: string) => resolveTarget(slugIndex, target);
 
-type Route = { view: "list" } | { view: "entity"; slug: string } | { view: "new"; title: string };
+const MAP_REF_KINDS: MapRefKind[] = ["burg", "state", "province", "religion", "culture", "marker", "river"];
+
+type Route = { view: "list" } | { view: "entity"; slug: string } | { view: "new"; title: string; mapRef?: MapRef };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
   if (hash.startsWith("entity/")) return { view: "entity", slug: decodeURIComponent(hash.slice("entity/".length)) };
   if (hash.startsWith("new")) {
     const params = new URLSearchParams(hash.split("?")[1] ?? "");
-    return { view: "new", title: params.get("title") ?? "" };
+    const title = params.get("title") ?? "";
+    const mapKind = params.get("mapKind");
+    const mapId = params.get("mapId");
+    const mapCell = params.get("mapCell");
+    const mapRef =
+      mapKind && MAP_REF_KINDS.includes(mapKind as MapRefKind) && mapId
+        ? { kind: mapKind as MapRefKind, id: Number(mapId), name: title, cell: mapCell ? Number(mapCell) : undefined }
+        : undefined;
+    return { view: "new", title, mapRef };
   }
   return { view: "list" };
 }
@@ -105,6 +115,14 @@ function renderRelations(entity: WikiEntity): string {
   return `<section class="relations"><h3>Relations</h3><ul>${items}</ul></section>`;
 }
 
+/** FMG's `?burg=<id>` / `?cell=<id>` URL params already focus the map — see docs/wiki/URL-parameters.md */
+function mapViewHref(mapRef: MapRef | undefined): string | undefined {
+  if (!mapRef) return undefined;
+  if (mapRef.kind === "burg") return `./index.html?burg=${mapRef.id}&scale=8`;
+  if (mapRef.cell !== undefined) return `./index.html?cell=${mapRef.cell}&scale=8`;
+  return undefined;
+}
+
 function renderEntityView(slug: string): void {
   const content = el<HTMLElement>("content");
   const entity = byslug(slug);
@@ -119,6 +137,7 @@ function renderEntityView(slug: string): void {
     : "";
   const tags = (entity.frontmatter.tags ?? []).map(tag => `<span class="tag">${tag}</span>`).join(" ");
   const canEdit = dirHandle && handles.has(slug);
+  const mapHref = mapViewHref(mapRef);
 
   content.innerHTML = `
     <header class="entity-header">
@@ -129,7 +148,10 @@ function renderEntityView(slug: string): void {
         ${tags}
       </div>
       ${entity.frontmatter.summary ? `<p class="summary">${entity.frontmatter.summary}</p>` : ""}
-      ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
+      <div class="entity-actions">
+        ${mapHref ? `<a href="${mapHref}" target="_blank" rel="noopener">View on map ↗</a>` : ""}
+        ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
+      </div>
     </header>
     ${renderRelations(entity)}
     <article class="entity-body">${renderMarkdown(entity.body, resolveLink)}</article>
@@ -169,12 +191,14 @@ function renderEditorView(slug: string): void {
   });
 }
 
-function renderNewEntityView(title: string): void {
+function renderNewEntityView(title: string, mapRef?: MapRef): void {
   const content = el<HTMLElement>("content");
+  const mapRefNote = mapRef ? `<p class="summary">Linking to map ${mapRef.kind} #${mapRef.id} once created.</p>` : "";
 
   if (!dirHandle) {
     content.innerHTML = `
       <h1>“${title}” doesn't have a page yet</h1>
+      ${mapRefNote}
       <p>Open a wiki folder (top left) to create it here, or add a file by hand under
       <code>wiki/</code> following the schema in <code>wiki/SCHEMA.md</code>.</p>
     `;
@@ -183,6 +207,7 @@ function renderNewEntityView(title: string): void {
 
   content.innerHTML = `
     <h1>Create "${title}"</h1>
+    ${mapRefNote}
     <label>Type:
       <select id="new-type">
         <option value="place">place</option>
@@ -197,7 +222,7 @@ function renderNewEntityView(title: string): void {
 
   el<HTMLButtonElement>("create-btn").addEventListener("click", async () => {
     const type = el<HTMLSelectElement>("new-type").value;
-    const { slug } = await createEntity(dirHandle!, title, type);
+    const { slug } = await createEntity(dirHandle!, title, type, mapRef);
     await reloadFromDirectory();
     location.hash = `#/entity/${encodeURIComponent(slug)}`;
   });
@@ -214,7 +239,7 @@ function renderHomeView(): void {
 function render(): void {
   const route = currentRoute();
   if (route.view === "entity") renderEntityView(route.slug);
-  else if (route.view === "new") renderNewEntityView(route.title);
+  else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
   else renderHomeView();
 }
 
