@@ -136,13 +136,13 @@ its own tab if you'd rather not have it embedded.
   and a **"Write a lore page for this ↗"** link that hands off to the normal page-creation flow,
   pre-filled. If the button just shows an error, the API server (step 2) isn't running.
 
-## 5. Try the Leaflet camera (Phase 5, in progress)
+## 5. Try the Leaflet camera and the biomes layer (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code — this is the one thing in this phase that's actually live in the running app so far;
-everything else (rendering layers as real GeoJSON, the minimap, the ruler) is still on the old
-code, unconverted. There's no visible UI difference to look for — the useful check is that nothing
-*regressed*:
+d3-zoom code, and the **biomes** layer is the first one actually rendered by Leaflet
+(`L.geoJSON()`) rather than hand-drawn SVG — everything else (states, provinces, rivers, routes,
+burgs, markers, the minimap, the ruler) is still on the old code, unconverted. There's no visible
+UI difference to look for beyond biomes itself — the useful check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -152,10 +152,15 @@ code, unconverted. There's no visible UI difference to look for — the useful c
   which is now fed by Leaflet rather than d3.
 - The minimap (bottom-left, if enabled) should still track the viewport rectangle correctly while
   panning/zooming.
+- **Biomes**: switch to the "Biomes" layer preset (or toggle the biomes layer on from the layers
+  panel) — it should render and color exactly as before. In the Biomes editor (bottom toolbar),
+  hover a biome row to confirm the highlight-on-hover outline still appears on the map, and change
+  a biome's color to confirm it updates. Toggle the layer off and back on to confirm it still
+  reappears correctly (this exercises the pane-creation fix described in `MIGRATION.md`).
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
-for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`) and what's
-still unconverted.
+for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
+`src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`) and what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
