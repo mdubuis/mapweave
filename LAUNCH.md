@@ -136,13 +136,14 @@ its own tab if you'd rather not have it embedded.
   and a **"Write a lore page for this ↗"** link that hands off to the normal page-creation flow,
   pre-filled. If the button just shows an error, the API server (step 2) isn't running.
 
-## 5. Try the Leaflet camera and the biomes layer (Phase 5, in progress)
+## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and the **biomes** layer is the first one actually rendered by Leaflet
-(`L.geoJSON()`) rather than hand-drawn SVG — everything else (states, provinces, rivers, routes,
-burgs, markers, the minimap, the ruler) is still on the old code, unconverted. There's no visible
-UI difference to look for beyond biomes itself — the useful check is that nothing *regressed*:
+d3-zoom code, and **biomes** and **religions** are the first two layers actually rendered by
+Leaflet (`L.geoJSON()`) rather than hand-drawn SVG — everything else (states, provinces, cultures,
+rivers, routes, burgs, markers, the minimap, the ruler) is still on the old code, unconverted.
+There's no visible UI difference to look for beyond those two layers — the useful check is that
+nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -157,10 +158,16 @@ UI difference to look for beyond biomes itself — the useful check is that noth
   hover a biome row to confirm the highlight-on-hover outline still appears on the map, and change
   a biome's color to confirm it updates. Toggle the layer off and back on to confirm it still
   reappears correctly (this exercises the pane-creation fix described in `MIGRATION.md`).
+- **Religions**: switch to the "Religions" preset. In the Religions editor: hover a row (outline
+  highlight on the map), change a color (should update), click the "locate" icon on a row (should
+  zoom/pan to that religion's territory — this exercises a real coordinate-space bug found and
+  fixed during this conversion, see `MIGRATION.md`), and remove a religion (its territory should
+  disappear from the map, not just the editor list).
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
-`src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`) and what's still unconverted.
+`src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`) and
+what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
