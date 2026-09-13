@@ -125,8 +125,39 @@ its own tab if you'd rather not have it embedded.
   repo's `wiki/` directory. You can now edit any page in place (a plain `<textarea>` over the raw
   Markdown+frontmatter) and create new pages from broken/create links — changes write straight to
   disk.
+- **"View Map" panel** (Phase 4.1): click it in the sidebar — the map app opens full-screen inside
+  the wiki, in an iframe. Its own wiki button is suppressed while nested (no infinite wiki-in-map-
+  in-wiki), so this is currently one-way: wiki hosts map, not map hosts wiki.
+- **"Connect to map database…"** (Phase 4.2): needs the Postgres + API server from step 2 running,
+  and at least one map imported there. Click the button, pick a map from the dropdown, **Connect**.
+  The sidebar now shows a live tree of every generated entity (states → provinces → burgs, plus
+  cultures/religions/rivers/markers) merged in alongside the hand-written pages above — none of
+  that data was written to any `.md` file. Click a generated entity: it has a "from map #N" badge
+  and a **"Write a lore page for this ↗"** link that hands off to the normal page-creation flow,
+  pre-filled. If the button just shows an error, the API server (step 2) isn't running.
 
-## 5. Verify nothing's broken after a change
+## 5. Try the Leaflet camera (Phase 5, in progress)
+
+Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
+d3-zoom code — this is the one thing in this phase that's actually live in the running app so far;
+everything else (rendering layers as real GeoJSON, the minimap, the ruler) is still on the old
+code, unconverted. There's no visible UI difference to look for — the useful check is that nothing
+*regressed*:
+
+- Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
+- `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
+  load and center correctly.
+- Zoom in enough to trigger label resizing and the state-border halo effect (`shapeRendering` set
+  to something other than `optimizeSpeed` in Options → Interface) — both read `viewport.scale`,
+  which is now fed by Leaflet rather than d3.
+- The minimap (bottom-left, if enabled) should still track the viewport rectangle correctly while
+  panning/zooming.
+
+If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
+for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`) and what's
+still unconverted.
+
+## 6. Verify nothing's broken after a change
 
 Run these before considering any change done — same commands CI and the pre-commit hook use:
 
@@ -140,7 +171,7 @@ npm run build        # both index.html and wiki.html bundles
 `npm run test:e2e` (Playwright) exists but per project convention is **never run automatically** —
 only run it yourself, deliberately, if you need end-to-end coverage.
 
-## 6. Where to make improvements
+## 7. Where to make improvements
 
 | Want to change... | Look at |
 |---|---|
