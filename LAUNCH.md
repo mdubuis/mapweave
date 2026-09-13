@@ -69,7 +69,8 @@ Full endpoint list and what's deliberately not imported yet (zones, river meande
 topology) in `server/README.md`.
 
 **Generate a map server-side** (Phase 3 — the real generation engine, running under Node, no
-browser needed):
+browser needed). Still from `server/` (all `npm run` commands on this page are — the `generate`
+script only exists in `server/package.json`, not the one at the repo root):
 
 ```bash
 npm run generate -- --seed my-world --width 1280 --height 800 --density 4 --name "My World"
