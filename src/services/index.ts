@@ -6,6 +6,7 @@ import "./era-switcher";
 import "./fonts";
 import "./url-params";
 import "./versioning";
+import "./wiki-panel";
 
 export const Services = createRegistry({
   Cloud: () => import("@/services/io/cloud").then(m => m.CloudStorage),

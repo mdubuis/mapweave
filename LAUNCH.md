@@ -29,11 +29,19 @@ The map app boots as usual: a random map generates on load.
   `?maplink=...&` for that era's `public/maps/*.map` file — which doesn't exist yet in this repo
   (see `public/maps/README.md`), so you'll see FMG's normal "map link is not valid" message. That's
   expected until a real `.map` file is exported and dropped there for at least one era.
+- **Wiki menu button**: a small circular button (top-right, book/sitemap icon) opens the wiki as a
+  slide-in panel without leaving the map — see below.
+- **Style**: dialogs, buttons, inputs, the options panel, and the bottom hint bar got a pass —
+  rounded corners, soft shadows, smoother transitions, and a proper keyboard focus ring, all layered
+  on the app's existing dialog theme-color system rather than replacing it. This hasn't been
+  clicked through in a real browser (see step 4) — if something looks off in a specific dialog,
+  that's the first place to check.
 
 ## 3. Try the wiki app (Phase 2/4)
 
-Open `/Fantasy-Map-Generator/wiki.html` (same origin, swap `index.html` for `wiki.html` in the URL
-bar). No map needs to be loaded for this — it's a separate page.
+Click the circular wiki button (top-right of the map screen) to open it as a slide-in panel — no
+map needs to be loaded for this. You can also open `/Fantasy-Map-Generator/wiki.html` directly in
+its own tab if you'd rather not have it embedded.
 
 - Browse the seed content: **Old Port**, **Mira Thorne**, **Silver Compact**, **The Salt War**, and
   the two eras, all cross-linked with `[[wikilinks]]`. Click through them.
@@ -74,6 +82,8 @@ only run it yourself, deliberately, if you need end-to-end coverage.
 | How map objects link to wiki pages | `src/wiki/map-link.ts`, plus the three call sites: `src/controllers/burg-editor.ts`, `markers-editor.ts`, `states-editor.ts` |
 | Timeline / era logic | `src/wiki/eras.ts` (resolution), `src/services/era-switcher.ts` (map-side UI) |
 | Seed/example content | `wiki/**/*.md` — feel free to replace with your real world's content |
+| The wiki menu button/panel on the map | `src/services/wiki-panel.ts` |
+| Shared dialog/button/input styling | `public/index.css` — look for the `--radius`/`--shadow`/`--transition` tokens near the top and the rules using them (`.ui-widget.ui-widget-content`, `.ui-widget-header`, `#options`, generic `button`/`input`/`select`) |
 
 Known gaps worth tackling next (see `MAPWEAVE.md`'s decisions log for full context):
 - No real `.map` files for the seed eras yet — the timeline feature has nothing to actually load.

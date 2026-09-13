@@ -2,6 +2,13 @@
   --monospace: Consolas, monospace;
   --serif: Georgia, serif;
   --sans-serif: Helvetica, Arial, sans-serif;
+
+  /* Shared chrome tokens (dialogs/buttons/inputs only — never used by map-rendering rules) */
+  --radius: 8px;
+  --radius-sm: 4px;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.18);
+  --transition: 0.15s ease;
 }
 
 /* hide Google translate header */
@@ -33,20 +40,21 @@ button {
 input,
 select,
 textarea {
-  border: 0.5px solid #dbdfe6;
-  border-radius: 0.5px;
+  border: 1px solid #dbdfe6;
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
 }
 
 select {
   height: 1.6em;
-  border-top-color: #abadb3;
-  padding: 0;
+  padding: 0 0.2em;
   text-indent: 0px;
 }
 
 input {
-  border-top-color: #abadb3;
   padding: 2px;
   text-indent: 1px;
 }
@@ -103,6 +111,25 @@ select,
 a,
 textarea {
   outline: none;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--header);
+  outline-offset: 1px;
+}
+
+button {
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--transition),
+    transform var(--transition);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 button,
@@ -369,6 +396,8 @@ text.drag {
   background: var(--header);
   color: #ffffff;
   font-weight: bold;
+  border-radius: var(--radius) var(--radius) 0 0;
+  transition: background-color var(--transition);
 }
 
 button.ui-button:disabled {
@@ -377,6 +406,26 @@ button.ui-button:disabled {
 
 button.ui-button:disabled:hover {
   cursor: default;
+}
+
+.ui-widget.ui-widget-content {
+  border-color: var(--dark-solid);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.ui-dialog .ui-dialog-titlebar button {
+  border-radius: 50%;
+  transition: background-color var(--transition);
+}
+
+.ui-dialog .ui-dialog-titlebar button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.ui-dialog .ui-dialog-titlebar button:active {
+  border-color: var(--dark-solid);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .ui-dialog,
@@ -394,17 +443,21 @@ button.ui-button:disabled:hover {
     padding: 0;
     width: 1.3em;
     height: 1.6em;
-    border: solid 1px #5e4fa2;
+    border: solid 1px var(--dark-solid);
+    border-radius: var(--radius-sm);
   }
 }
 
 #options {
   position: absolute;
   font-family: var(--monospace);
-  border: solid 1px #5e4fa2;
+  border: solid 1px var(--dark-solid);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   margin: 10px;
   padding-bottom: 0.3em;
   background: var(--bg-light);
+  overflow: hidden;
 }
 
 #options input,
@@ -830,7 +883,8 @@ fieldset {
   font-size: calc(12px + 0.5vw);
   white-space: pre-line;
   z-index: 99999;
-  background: linear-gradient(0.1turn, #ffffff00, #c71d1d66, #ffffff00);
+  background: linear-gradient(0.1turn, rgba(20, 20, 24, 0), rgba(20, 20, 24, 0.55), rgba(20, 20, 24, 0));
+  transition: opacity var(--transition);
 }
 
 #optionsContent table {

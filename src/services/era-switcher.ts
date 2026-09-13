@@ -4,6 +4,9 @@
  * URL param to actually load the file — no new load path, just navigation. Renders nothing when
  * the wiki defines no "type: era" entities, so untouched projects see no change at all.
  */
+
+import { showDataTip } from "@/components/tooltips";
+import { debounce } from "@/utils";
 import { loadEntities } from "@/wiki/entities";
 import { type Era, loadEras } from "@/wiki/eras";
 
@@ -24,14 +27,19 @@ function injectStyles(): void {
       left: 50%;
       transform: translateX(-50%);
       z-index: 20;
-      background: rgba(20, 20, 20, 0.85);
-      border: 1px solid #555;
-      border-radius: 6px;
+      background: var(--bg-dialogs, rgba(20, 20, 20, 0.85));
+      border: 1px solid var(--dark-solid, #555);
+      border-radius: var(--radius, 6px);
+      box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.2));
       padding: 0.25em 0.5em;
+      transition: box-shadow var(--transition, 0.15s ease);
+    }
+    #eraSwitcher:hover {
+      box-shadow: var(--shadow, 0 6px 20px rgba(0, 0, 0, 0.3));
     }
     #eraSwitcher select {
       background: transparent;
-      color: #eee;
+      color: inherit;
       border: none;
       font: inherit;
     }
@@ -59,6 +67,7 @@ export function initEraSwitcher(): void {
     <option value=""${current ? "" : " selected"} disabled>Select an era…</option>${options}
   </select>`;
   document.body.appendChild(container);
+  container.addEventListener("mousemove", debounce(showDataTip, 50));
 
   container.querySelector("select")!.addEventListener("change", event => {
     const url = (event.target as HTMLSelectElement).value;
