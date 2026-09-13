@@ -1,5 +1,5 @@
 // Global layers registry: owns layers list, order, and svg skeleton
-import { drawBiomes } from "@/renderers/draw-biomes";
+import { drawBiomes, ensureBiomesPane, eraseBiomes } from "@/renderers/draw-biomes";
 import { drawBorders } from "@/renderers/draw-borders";
 import { drawBurgIcons } from "@/renderers/draw-burg-icons";
 import { drawCells } from "@/renderers/draw-cells";
@@ -40,14 +40,17 @@ import { createEl, ensureEl, findEl } from "@/utils/nodeUtils";
 
 interface LayerParams<Id extends string = string> {
   id: Id; // canonical identity, persisted in the .map file
-  element?: string; // id of the svg group holding the layer content
-  parent: "viewbox" | "map"; // id of the svg element the layer group is appended to
+  element?: string; // id of the svg group (or, for "leaflet", the Leaflet pane) holding the layer content
+  // "leaflet": a real Leaflet vector layer in its own pane, created by the draw function itself
+  // (see renderers/leaflet/) rather than by this registry — see MIGRATION.md Phase 5
+  parent: "viewbox" | "map" | "leaflet";
   children?: ChildParams[]; // permament elements created inside the group
   attrs?: Record<string, string>; // static attributes applied to the layer group
   permanent?: boolean; // structural layer: on from the start, never turned off and never saved as state
   keepContent?: boolean; // keep the content in the DOM when the layer is turned off
   draw?: (layer: Layer) => void; // renderer function
   erase?: (layer: Layer) => void; // custom teardown, defaults to erasing the content down to the declared children
+  ensurePane?: () => void; // "leaflet" layers only: create the pane (idempotent), before any draw call
 }
 
 type ChildParams = { id: string; tag: string; attrs?: Record<string, string> };
@@ -60,7 +63,7 @@ export interface LayersState {
 export class Layer<Id extends string = string> {
   readonly id: Id;
   readonly elementId: string;
-  readonly parent: "viewbox" | "map";
+  readonly parent: "viewbox" | "map" | "leaflet";
   readonly children: ChildParams[] = [];
 
   /** the registry reads `params`; consumers use the fields above and `getEl()` */
@@ -71,8 +74,9 @@ export class Layer<Id extends string = string> {
     this.children = params.children ?? [];
   }
 
-  getEl(): SVGGElement {
-    return ensureEl<SVGGElement>(this.elementId);
+  /** an SVGGElement for every layer except "leaflet" ones, which are a Leaflet pane (a plain div) */
+  getEl(): HTMLElement | SVGElement {
+    return ensureEl<HTMLElement | SVGElement>(this.elementId);
   }
 }
 
@@ -88,6 +92,15 @@ export class LayersRegistry<Id extends string = string> {
   init(): void {
     for (const layer of this.layers) {
       const { parent, attrs } = layer.params;
+
+      // a Leaflet pane: content comes from the draw function itself (renderers/leaflet/), but the
+      // pane must exist now — before the layer is ever shown/hidden, not just before it's drawn
+      if (parent === "leaflet") {
+        layer.params.ensurePane?.();
+        const pane = findEl(layer.elementId);
+        if (pane) this.setVisible(pane, this.active.has(layer.id));
+        continue;
+      }
 
       let group = findEl<SVGGElement>(layer.elementId);
       if (!group) group = createEl<SVGGElement>("g", layer.elementId);
@@ -185,7 +198,7 @@ export class LayersRegistry<Id extends string = string> {
 
   eraseAll(): void {
     for (const layer of this.layers) {
-      if (layer.parent !== "viewbox") continue;
+      if (layer.parent !== "viewbox" && layer.parent !== "leaflet") continue;
       if (layer.params.erase) layer.params.erase(layer);
       else this.eraseContent(layer);
     }
@@ -263,7 +276,7 @@ export class LayersRegistry<Id extends string = string> {
   }
 
   /** write visibility, dropping the style attribute when it carries nothing else: keeps the saved svg clean */
-  private setVisible(element: SVGGElement, visible: boolean): void {
+  private setVisible(element: HTMLElement | SVGElement, visible: boolean): void {
     element.style.display = visible ? "" : "none";
     if (!element.getAttribute("style")) element.removeAttribute("style");
   }
@@ -295,7 +308,14 @@ const mapLayers = [
     keepContent: true,
     draw: drawLakes
   }),
-  new Layer({ id: "biomes", parent: "viewbox", draw: drawBiomes }),
+  new Layer({
+    id: "biomes",
+    element: "biomes-leaflet",
+    parent: "leaflet",
+    draw: drawBiomes,
+    erase: eraseBiomes,
+    ensurePane: ensureBiomesPane
+  }),
   new Layer({ id: "cells", parent: "viewbox", draw: drawCells }),
   new Layer({ id: "grid", element: "gridOverlay", parent: "viewbox", draw: drawGrid }),
   new Layer({ id: "coordinates", parent: "viewbox", draw: drawCoordinates }),

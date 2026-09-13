@@ -296,14 +296,14 @@ function biomeHighlightOn(event: Event): void {
   if (customization === 6) return;
   const biome = +(event.target as HTMLElement).dataset.id!;
   const animate = transition().duration(2000).ease(easeSinIn);
-  select(`#biomes > #biome${biome}`).raise().transition(animate).attr("stroke-width", 2).attr("stroke", "#cd4c11");
+  select(`#biome${biome}`).raise().transition(animate).attr("stroke-width", 2).attr("stroke", "#cd4c11");
 }
 
 function biomeHighlightOff(event: Event): void {
   if (customization === 6) return;
   const biome = +(event.target as HTMLElement).dataset.id!;
   const color = pack.biomes[biome].color;
-  select(`#biomes > #biome${biome}`).transition().attr("stroke-width", 0.7).attr("stroke", color);
+  select(`#biome${biome}`).transition().attr("stroke-width", 0.7).attr("stroke", color);
 }
 
 function biomeChangeColor(fillBox: FillBoxElement): void {

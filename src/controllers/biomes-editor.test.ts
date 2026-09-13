@@ -1,6 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { Biome } from "@/generators/biomes-generator";
 import { collectBiomeStatistics, createCustomBiome, removeCustomBiome } from "./biomes-editor";
+
+// This file never touches map rendering; the mock only keeps the real "leaflet" package (which
+// probes document.documentElement.style at import time) from loading under the minimal DOM stub
+vi.mock("leaflet", () => ({ extend: Object.assign, CRS: { Simple: {} } }));
 
 const createBiome = (i: number): Biome => ({
   i,

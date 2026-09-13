@@ -14,6 +14,7 @@ const LinearSimpleCRS = L.extend({}, L.CRS.Simple, {
 });
 
 let map: L.Map | undefined;
+const featurePanes = new Map<string, HTMLElement>();
 
 /** The single Leaflet map instance, created on first use */
 export function getLeafletMap(): L.Map {
@@ -36,6 +37,28 @@ export function getLeafletMap(): L.Map {
 
 export function isLeafletMapReady(): boolean {
   return map !== undefined;
+}
+
+/**
+ * A named pane for a real (GeoJSON-backed) vector layer, created once and reused. A standard
+ * `map.createPane` call — a child of Leaflet's own zoom-animated map pane — so `L.geoJSON`'s SVG
+ * renderer gets fully native pan/zoom handling.
+ *
+ * The legacy SVG pane (below) was appended to the map container *after* Leaflet's own map pane, so
+ * it paints on top of every pane created here regardless of `zIndex` — `zIndex` only orders panes
+ * created here *relative to each other*. A deliberate, documented compromise (MIGRATION.md Phase 5):
+ * converted layers render as one block below the legacy SVG content, not interleaved with it.
+ */
+export function getFeaturePane(name: string, zIndex: number): HTMLElement {
+  const map = getLeafletMap();
+  let pane = featurePanes.get(name);
+  if (!pane) {
+    pane = map.createPane(name);
+    pane.id = name;
+    pane.style.zIndex = String(zIndex);
+    featurePanes.set(name, pane);
+  }
+  return pane;
 }
 
 function ensureContainer(): HTMLDivElement {

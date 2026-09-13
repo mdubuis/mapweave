@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
+
+// This file never touches map rendering; the mock only keeps the real "leaflet" package (which
+// probes document.documentElement.style at import time) from loading under the minimal DOM stub
+vi.mock("leaflet", () => ({ extend: Object.assign, CRS: { Simple: {} } }));
+
 import { Styles } from "./styles";
 import {
   burgGroupFromLegacy,
