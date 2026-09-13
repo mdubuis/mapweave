@@ -1,15 +1,31 @@
-import { type D3ZoomEvent, select, zoom, zoomIdentity, zoomTransform } from "d3";
+import { select } from "d3";
+import * as L from "leaflet";
 import { Layers } from "@/components/layers";
+import { getLeafletMap, isLeafletMapReady } from "@/components/leaflet-map";
 import { setViewportTransform, viewport } from "@/components/viewport";
 import { ViewportLayers } from "@/renderers/viewport/viewport-renderer";
 import { ensureEl, findEl } from "@/utils/nodeUtils";
 import { rn } from "@/utils/numberUtils";
 
-const DEFAULT_SCALE_EXTENT: [number, number] = [1, 20];
-const zoomBehavior = zoom<SVGSVGElement, unknown>().scaleExtent(DEFAULT_SCALE_EXTENT);
+let listenersBound = false;
 
+/** (Re-)enable the Leaflet gesture handlers and, on first call, wire the view-change listeners.
+ *  Callers use this to restore default map interaction after a tool has taken it over */
 export function applyZoomBehavior(): void {
-  select<SVGSVGElement, unknown>("#map").call(zoomBehavior.on("zoom", onZoom).on("end", handleZoomEnd));
+  const map = getLeafletMap();
+
+  if (!listenersBound) {
+    map.on("move zoom", onZoom);
+    map.on("moveend zoomend", handleZoomEnd);
+    listenersBound = true;
+  }
+
+  map.dragging.enable();
+  map.scrollWheelZoom.enable();
+  map.doubleClickZoom.enable();
+  map.touchZoom.enable();
+  map.boxZoom.enable();
+  map.keyboard.enable();
 }
 
 let frameId: number | null = null;
@@ -17,8 +33,15 @@ let pendingScaleChange = false;
 let pendingPositionChange = false;
 let isViewChanged = false;
 
-function onZoom(event: D3ZoomEvent<SVGSVGElement, unknown>): void {
-  const { k, x, y } = event.transform;
+/** World point (0,0) rendered at the current view: its screen position is the transform's translate */
+function currentTransform(): { k: number; x: number; y: number } {
+  const map = getLeafletMap();
+  const origin = map.latLngToContainerPoint(L.latLng(0, 0));
+  return { k: map.getZoom(), x: origin.x, y: origin.y };
+}
+
+function onZoom(): void {
+  const { k, x, y } = currentTransform();
 
   const isScaleChanged = viewport.scale !== k;
   const isPositionChanged = viewport.x !== x || viewport.y !== y;
@@ -110,53 +133,59 @@ export function invokeActiveZooming(): void {
   }
 }
 
-/** Zoom to a specific point */
+/** Zoom to a specific point, centering it in the viewport */
 export function zoomTo(x: number, y: number, z = 8, duration = 2000): void {
-  const transform = zoomIdentity.translate(x * -z + viewport.width / 2, y * -z + viewport.height / 2).scale(z);
-  select<SVGSVGElement, unknown>("#map").transition().duration(duration).call(zoomBehavior.transform, transform);
+  const map = getLeafletMap();
+  const center = L.latLng(y, x);
+  if (duration > 0) map.flyTo(center, z, { duration: duration / 1000 });
+  else map.setView(center, z, { animate: false });
 }
 
 /** Reset zoom to the initial view: the map origin at the smallest scale the extents allow */
 export function resetZoom(duration = 1000): void {
-  const [min] = zoomBehavior.scaleExtent();
-  const transform = zoomIdentity.scale(min);
-  const selection = select<SVGSVGElement, unknown>("#map");
+  const map = getLeafletMap();
+  const min = map.getMinZoom();
+  // the point that must land at the viewport center for world (0,0) to land at the viewport corner
+  const center = map.unproject(L.point(viewport.width / 2, viewport.height / 2), min);
 
-  if (duration) selection.transition().duration(duration).call(zoomBehavior.transform, transform);
-  else zoomBehavior.transform(selection, transform); // no transition: the caller redraws right after
+  if (duration) map.flyTo(center, min, { duration: duration / 1000 });
+  else map.setView(center, min, { animate: false }); // no transition: the caller redraws right after
 }
 
 export function panMap(x: number, y: number): void {
-  zoomBehavior.translateBy(select<SVGSVGElement, unknown>("#map"), x, y);
+  getLeafletMap().panBy([x, y], { animate: false });
 }
 
 export function setMapZoom(value: number): void {
-  zoomBehavior.scaleTo(select<SVGSVGElement, unknown>("#map"), value);
+  getLeafletMap().setZoom(value, { animate: false });
 }
 
 export function changeMapZoom(factor: number): void {
-  zoomBehavior.scaleBy(select<SVGSVGElement, unknown>("#map"), factor);
+  const map = getLeafletMap();
+  map.setZoom(map.getZoom() * factor, { animate: false });
 }
 
 export function setZoomExtent(min: number, max: number): void {
-  zoomBehavior.scaleExtent([min, max]);
+  const map = getLeafletMap();
+  map.setMinZoom(min);
+  map.setMaxZoom(max);
 }
 
 /**
- * Pull the current view back inside the extents. d3 applies them to gestures only, so a scale or a
- * translate that a new viewport or a new map has put out of bounds stays there until asked
+ * Pull the current view back inside the extents. Leaflet applies min/maxZoom to gestures only, so a
+ * scale that a new viewport or a new map has put out of bounds stays there until asked
  */
 export function constrainZoom(): void {
-  const node = findEl<SVGSVGElement>("map");
-  if (!node || !("__zoom" in node)) return; // no zoom behavior on the element yet
-  zoomBehavior.scaleTo(select<SVGSVGElement, unknown>(node), zoomTransform(node).k);
+  if (!isLeafletMapReady()) return; // no zoom behavior on the element yet
+
+  const map = getLeafletMap();
+  const zoom = map.getZoom();
+  if (zoom < map.getMinZoom()) map.setZoom(map.getMinZoom(), { animate: false });
+  else if (zoom > map.getMaxZoom()) map.setZoom(map.getMaxZoom(), { animate: false });
 }
 
 export function setTranslateExtent(x0: number, y0: number, x1: number, y1: number): void {
-  zoomBehavior.translateExtent([
-    [x0, y0],
-    [x1, y1]
-  ]);
+  getLeafletMap().setMaxBounds(L.latLngBounds(L.latLng(y0, x0), L.latLng(y1, x1)));
 }
 
 type ZoomTo = typeof zoomTo;

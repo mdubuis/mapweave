@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// This file never touches pan/zoom; the mock only keeps the real "leaflet" package (which probes
+// document.documentElement.style at import time) from loading under this suite's minimal DOM stub
+vi.mock("leaflet", () => ({ extend: Object.assign, CRS: { Simple: {} } }));
 
 (globalThis as Record<string, unknown>).ERROR = false;
 (globalThis as Record<string, unknown>).changeViewMode = () => {};

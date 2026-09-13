@@ -80,6 +80,11 @@ iframe {
   width: 100%;
 }
 
+#leaflet-root {
+  position: fixed;
+  inset: 0;
+}
+
 #map {
   background-color: #000000;
   mask-mode: alpha;
