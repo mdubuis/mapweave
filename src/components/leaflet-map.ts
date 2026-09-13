@@ -14,7 +14,6 @@ const LinearSimpleCRS = L.extend({}, L.CRS.Simple, {
 });
 
 let map: L.Map | undefined;
-let legacyPane: HTMLElement | undefined;
 
 /** The single Leaflet map instance, created on first use */
 export function getLeafletMap(): L.Map {
@@ -39,14 +38,6 @@ export function isLeafletMapReady(): boolean {
   return map !== undefined;
 }
 
-/** The pane hosting the existing hand-drawn #map SVG. A plain sibling of Leaflet's own map pane
- *  (not a child of it) so it gets none of Leaflet's automatic pane transform — components/zoom.ts
- *  keeps driving its translate/scale itself, exactly as it drove the old d3-zoom transform */
-export function getLegacyPane(): HTMLElement {
-  if (!legacyPane) throw new Error("Leaflet map is not initialized yet");
-  return legacyPane;
-}
-
 function ensureContainer(): HTMLDivElement {
   let container = document.getElementById("leaflet-root") as HTMLDivElement | null;
   if (!container) {
@@ -57,8 +48,12 @@ function ensureContainer(): HTMLDivElement {
   return container;
 }
 
+/** Hosts the existing hand-drawn #map SVG in a pane that is a plain sibling of Leaflet's own map
+ *  pane (not a child of it), so it gets none of Leaflet's automatic pane transform —
+ *  components/zoom.ts keeps driving its translate/scale itself, exactly as it drove the old
+ *  d3-zoom transform. Because it is appended after Leaflet's map pane, it paints on top of it. */
 function mountLegacySvg(map: L.Map): void {
-  legacyPane = map.createPane("legacySvg", map.getContainer());
+  const legacyPane = map.createPane("legacySvg", map.getContainer());
   legacyPane.id = "legacyPane";
 
   const svg = document.getElementById("map");
