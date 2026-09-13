@@ -14,7 +14,61 @@ Open the URL Vite prints (something like `http://localhost:5199/Fantasy-Map-Gene
 `/Fantasy-Map-Generator/` base path is inherited from upstream FMG and hasn't been renamed yet).
 The map app boots as usual: a random map generates on load.
 
-## 2. Try the map app changes (Phase 3/4)
+## 2. Test the Postgres/PostGIS migration (Phases 1-2)
+
+This is separate from the app above — nothing in the running app talks to it yet (that's Phase 4+).
+It's its own thing to click through: a local database plus a small API server, checked with `curl`
+and `psql` rather than a browser.
+
+**Start the database:**
+
+```bash
+docker compose up -d        # from the repo root — starts Postgres+PostGIS, applies the schema on first run
+```
+
+`docker compose down -v` wipes it (e.g. to re-apply a changed `server/db/schema.sql`, which only
+runs against an empty volume).
+
+**Install and start the API:**
+
+```bash
+cd server
+npm install
+npm run start                # listens on http://127.0.0.1:3001
+```
+
+**Import a map.** Fastest path — the bundled synthetic fixture (three cells, no real map needed):
+
+```bash
+node scripts/import-map.mjs --pack scripts/fixtures/PackCells.sample.json --name "Test Map"
+```
+
+To import a map you actually generated: in the running app, **Options → Export → JSON → Pack
+Cells** (not the GeoJSON export menu — see `server/README.md` for why), then:
+
+```bash
+node scripts/import-map.mjs --pack ~/Downloads/PackCells.json --name "My World"
+```
+
+**Look at what landed**, either via `psql`:
+
+```bash
+docker exec mapweave-postgres psql -U mapweave -d mapweave -c "SELECT id, name, seed FROM maps;"
+```
+
+or via the API (any of these in a browser or `curl`):
+
+```
+http://127.0.0.1:3001/api/maps
+http://127.0.0.1:3001/api/maps/1
+http://127.0.0.1:3001/api/maps/1/layers/states     # a GeoJSON FeatureCollection
+http://127.0.0.1:3001/api/maps/1/entities/tree      # states → provinces → burgs, + cultures/religions/rivers/markers
+```
+
+Full endpoint list and what's deliberately not imported yet (zones, river meandering, grid
+topology) in `server/README.md`.
+
+## 3. Try the map app changes (Phase 3/4)
 
 - **Wiki links on map entities**: click any burg on the map (opens the Burg Editor) — there's a new
   link icon (🔗-style, `icon-link-ext`) next to the notes/book icon in the bottom toolbar. Click it:
@@ -37,7 +91,7 @@ The map app boots as usual: a random map generates on load.
   clicked through in a real browser (see step 4) — if something looks off in a specific dialog,
   that's the first place to check.
 
-## 3. Try the wiki app (Phase 2/4)
+## 4. Try the wiki app (Phase 2/4)
 
 Click the circular wiki button (top-right of the map screen) to open it as a slide-in panel — no
 map needs to be loaded for this. You can also open `/Fantasy-Map-Generator/wiki.html` directly in
@@ -58,7 +112,7 @@ its own tab if you'd rather not have it embedded.
   Markdown+frontmatter) and create new pages from broken/create links — changes write straight to
   disk.
 
-## 4. Verify nothing's broken after a change
+## 5. Verify nothing's broken after a change
 
 Run these before considering any change done — same commands CI and the pre-commit hook use:
 
@@ -72,7 +126,7 @@ npm run build        # both index.html and wiki.html bundles
 `npm run test:e2e` (Playwright) exists but per project convention is **never run automatically** —
 only run it yourself, deliberately, if you need end-to-end coverage.
 
-## 5. Where to make improvements
+## 6. Where to make improvements
 
 | Want to change... | Look at |
 |---|---|
@@ -84,6 +138,7 @@ only run it yourself, deliberately, if you need end-to-end coverage.
 | Seed/example content | `wiki/**/*.md` — feel free to replace with your real world's content |
 | The wiki menu button/panel on the map | `src/services/wiki-panel.ts` |
 | Shared dialog/button/input styling | `public/index.css` — look for the `--radius`/`--shadow`/`--transition` tokens near the top and the rules using them (`.ui-widget.ui-widget-content`, `.ui-widget-header`, `#options`, generic `button`/`input`/`select`) |
+| The Postgres/PostGIS migration | `MIGRATION.md` (plan + phase status), `server/README.md` (how to run/test it) |
 
 Known gaps worth tackling next (see `MAPWEAVE.md`'s decisions log for full context):
 - No real `.map` files for the seed eras yet — the timeline feature has nothing to actually load.
