@@ -2,6 +2,7 @@
 // and the shareable link. Deep links come from the wiki, from shared maps and from MFCG
 import { leastIndex, select } from "d3";
 import { fitMapToScreen } from "@/components/canvas";
+import { showGenerateIdleState } from "@/components/idle-state";
 import { Layers } from "@/components/layers";
 import { applyLayersPreset, applyURLLayers } from "@/components/layers-presets";
 import { type GenerationConfig, generate } from "@/components/lifecycle";
@@ -54,8 +55,8 @@ export async function checkLoadParameters(): Promise<void> {
     }
   }
 
-  WARN && console.warn("Generate random map");
-  generateMapOnLoad(size);
+  WARN && console.warn("Waiting for the user to generate a map");
+  showGenerateIdleState(() => generateMapOnLoad(size));
 }
 
 /** The start-up path: style, world, layers, then wherever the URL says to look */

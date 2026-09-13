@@ -12,4 +12,5 @@
 /memory
 .github/agents/bmad-*
 .github/prompts/bmad-*
+.claude/scheduled_tasks.lock
 .DS_Store

@@ -1,0 +1,150 @@
+# Migration Postgres/PostGIS + Génération serveur + Leaflet + Wiki unifié
+
+Approuvé le 2026-09-13. Voir `MAPWEAVE.md` pour l'historique des phases précédentes (1-4 : nettoyage,
+wiki, liens map↔wiki, timeline) que ce document ne remplace pas — il s'agit d'une migration
+ultérieure et bien plus large, avec son propre suivi de phases ci-dessous.
+
+## Contexte
+
+Mapweave tourne aujourd'hui entièrement côté client : moteur de génération procédurale FMG (Voronoi/climat/hydrologie/cultures, ~150 fichiers TS), rendu 100% SVG/D3, wiki Markdown séparé (`wiki.html`) relié à la carte (`index.html`) par un `map_ref` et une iframe. Zéro backend, site statique.
+
+L'utilisateur souhaite migrer vers : un backend PostgreSQL + PostGIS (local, mono-utilisateur, sans authentification), une génération procédurale qui tourne côté serveur plutôt que dans le navigateur, un rendu de carte basé sur Leaflet (couches vectorielles GeoJSON, pas un pipeline de tuiles complet), une vue carte intégrée *dans* le wiki (plus de page séparée), toutes les entités générées navigables dans une arborescence claire du wiki, et une génération déclenchée manuellement plutôt qu'automatique au chargement.
+
+Trois recherches approfondies (rendu SVG, persistance/génération, dépendances navigateur du moteur) ont confirmé la faisabilité et localisé précisément les risques : le moteur de génération est étonnamment portable côté Node (un seul vrai blocage), mais le rendu Leaflet est un chantier majeur (~85-90 fichiers touchent des API SVG directement). Ce document découpe le travail en phases indépendamment livrables, en gardant l'app fonctionnelle à chaque étape plutôt qu'une réécriture big-bang.
+
+**Comment utiliser ce plan** : chaque phase est un jalon validable séparément, dans l'esprit des phases précédentes du projet (voir `MAPWEAVE.md`). Rien n'empêche de s'arrêter après la Phase 0 ou la Phase 3 si le reste s'avère ne pas valoir le coût une fois vécu.
+
+---
+
+## Décisions de conception
+
+**Arborescence wiki = vue live sur la base, pas des fichiers générés.** Avec des centaines à quelques milliers d'entités par carte (burgs, states, etc.), générer un fichier Markdown par entité produirait un dépôt dominé par du bruit généré, en conflit avec l'usage actuel (fichiers `wiki/*.md` = lore écrit à la main, versionné proprement). La solution : le wiki charge deux sources fusionnées — les fichiers Markdown existants (inchangé) + les entités interrogées en direct depuis l'API Postgres, normalisées dans la même forme `WikiEntity`. Une action "développer en fiche de lore" sur n'importe quel nœud généré crée alors un vrai fichier `.md`, réutilisant le flux de création déjà construit en Phase 3 du projet (`#/new?mapKind=...`).
+
+**CRS = SRID 0 (Cartésien), jamais EPSG:4326.** Il n'existe aujourd'hui aucune projection géographique réelle — `pack.cells.p`/`grid.points` sont des `[x,y]` plats dans l'espace `options.map.graph.{width,height}`. C'est exactement le cas d'usage de **`L.CRS.Simple`** dans Leaflet (cartes "à plat", jeux, images). Traiter ces coordonnées comme des degrés de latitude/longitude serait faux.
+
+**Renderer Leaflet = `L.svg()`, pas `L.canvas()`.** Beaucoup de code actuel lit la géométrie DOM directement (`getBBox`, `getTotalLength`, `getPointAtLength` — placement de labels/emblèmes, outil règle, migration de fichiers anciens). `L.svg()` garde de vrais éléments `<path>` par entité, donc ce code s'adapte (`layer.getElement()` au lieu d'une sélection d3 brute) plutôt que d'être totalement réécrit. `L.canvas()` n'a aucun nœud DOM — casserait ce code *et* la délégation de clics simultanément. Un layer Canvas ciblé reste possible plus tard pour la maille brute de cellules (10-100K polygones) si le profilage le justifie.
+
+**Identifiants d'entités = ceux du moteur FMG, pas des clés auto-incrémentées fraîches.** Les tables Postgres doivent être clées `(map_id, id)` où `id` réutilise l'id numérique déjà assigné par le générateur (burg.i, state.i, etc.). Sinon, tous les `map_ref` déjà écrits à la main dans le wiki existant (Phases 3-4 précédentes) cassent silencieusement.
+
+**Pas de synchronisation offline.** Déploiement local mono-utilisateur explicitement choisi → `options.app`/`options.generation` restent en `localStorage` comme aujourd'hui ; IndexedDB ne garde que de l'état UI transitoire. Aucune file d'attente/résolution de conflits à construire.
+
+---
+
+## Phases
+
+| # | Portée | Dépend de | Risque | Casse l'existant si mal fait | Statut |
+|---|---|---|---|---|---|
+| 0 | Génération manuelle au chargement | rien | Faible | Non — un seul branchement isolé | **Fait** |
+| 1 | Schéma Postgres/PostGIS + ETL one-way (CLI), rien de branché à l'app | Docker | Faible | Non — l'ancien flux `.map` reste intact | À faire |
+| 2 | Serveur API Node, lecture seule sur Postgres | Phase 1 | Moyen | Non — purement additif | À faire |
+| 3 | Génération portée sur Node, `POST /api/maps` génère côté serveur | Phase 2 | **Élevé** | Seulement si la parité seed-à-seed n'est pas validée | À faire |
+| 4 | Le wiki devient la coquille hôte ; carte intégrée (encore en SVG) ; arborescence live | Phase 2 | Moyen | Oui, au système d'ères et aux `map_ref` — voir plus bas | À faire |
+| 5 | Migration Leaflet, incrémentale, couche par couche | Phase 3 + Phase 4 | **Le plus élevé** (~85-90 fichiers) | Outils interactifs (règle, minimap, labels) les plus exposés | À faire |
+| 6 | Retrait du format legacy pour les *nouvelles* cartes seulement | Phase 3 | Faible | Non si bien scopé | À faire |
+
+### Phase 0 — Génération manuelle (à faire en premier, indépendamment de tout le reste) — **Fait**
+
+Le seul point d'auto-génération sans intention explicite est le fallback inconditionnel dans `checkLoadParameters()` (`src/services/url-params.ts:57-58`) — remplacé par un état vide/idle avec un bouton "Générer" (`src/components/idle-state.ts`, nouveau). L'infrastructure de déclenchement manuel existait déjà et est réutilisée telle quelle : le bouton appelle exactement `generateMapOnLoad(size)`, la même fonction que les chemins `?seed=`/`?maplink=` utilisent déjà, juste différée à un clic au lieu d'auto-invoquée. Zéro changement dans le pipeline de génération lui-même.
+
+**Vérification** : ouvrir l'app sans paramètre d'URL et sans carte sauvegardée → écran vide avec bouton, pas de génération auto. `?seed=...`, `?maplink=...`, et "charger la dernière carte" continuent de fonctionner sans changement (ce sont des intentions explicites, elles restent automatiques). Confirmé : `tsc --noEmit`, lint, build, 1018/1018 tests, chargement de la page en local (200, pas d'erreur).
+
+### Phase 1 — Schéma Postgres/PostGIS + validation ETL
+
+`docker-compose.yml` (nouveau fichier) : un service Postgres+PostGIS local, volume local, pas d'authentification. Schéma détaillé plus bas. Script Node one-off qui prend une carte déjà générée (encore via le pipeline client actuel) et réutilise **directement** les quatre exporteurs GeoJSON déjà existants et fonctionnels dans `src/services/io/export.ts` (`saveGeoJsonCells`, `saveGeoJsonRoutes`, `saveGeoJsonRivers`, `saveGeoJsonMarkers`, `saveGeoJsonZones`, plus `connectVertices`/`toGeoCoordinates`) pour insérer en base. Rien dans l'app tournante ne dépend de ceci — phase de validation de schéma pure, sans risque pour `load.ts`/`save.ts`.
+
+À trancher pendant cette phase, pas après : pour les géométries fusionnées (contours d'état/province/biome), comparer porter `connectVertices` tel quel vs. insérer les données brutes par cellule et laisser PostGIS fusionner (`ST_Union`) et émettre le GeoJSON (`ST_AsGeoJSON`) à la lecture — moins de code de géométrie à maintenir côté app si PostGIS s'en charge bien.
+
+**Vérification** : générer une carte dans l'app actuelle, l'importer via le script, puis comparer (visuellement via QGIS ou `ST_AsGeoJSON` + un diff) la géométrie importée à l'export GeoJSON existant du menu Export — doivent être identiques.
+
+### Phase 2 — Serveur API Node, lecture seule
+
+Fastify (validation JSON Schema, cohérent avec le modèle de config déjà validé par zod dans le projet). Endpoints de lecture seule (liste des cartes, `meta`/`facts`/`layers`/`style`, GeoJSON par couche, arborescence d'entités). Le client continue de générer côté navigateur comme aujourd'hui ; la seule nouveauté est un endpoint "uploader la carte terminée" qui enveloppe le script d'import de la Phase 1. Ça isole complètement le risque schéma/API du risque, bien plus grand, du portage de la génération (Phase 3).
+
+**Vérification** : `curl` chaque endpoint contre une carte importée en Phase 1 ; le GeoJSON renvoyé doit charger correctement dans un `L.geoJSON()` de test isolé (page HTML jetable, pas encore l'app).
+
+### Phase 3 — Portage de la génération sur Node
+
+Le risque le plus concentré du plan, mais plus petit qu'attendu : sur 46 fichiers dans `src/generators/`, un seul point d'API navigateur est réellement sur le chemin du pipeline — `heightmap-generator.ts`'s `fromPrecreated()` (Canvas/Image/getImageData, pour les ~23 heightmaps pré-créées) — à remplacer par `sharp` (redimensionner + lire le buffer de pixels côté serveur, sans Canvas du tout). Les ~42 autres fichiers n'utilisent que le pattern `window.X = ...` (trivial en `globalThis.X = ...`) et sont du calcul pur. `alea` (PRNG à seed) fonctionne identiquement sous Node.
+
+`src/generators/pipeline.ts`'s `Pipeline<Id, TContext>` est déjà générique et portable tel quel — une invocation serveur est littéralement `new Pipeline(...).run(context)`. Il faut un équivalent serveur mince à `generate()` (`src/components/lifecycle.ts`) qui résout une requête HTTP en ce même `context`, puis persiste le résultat via la logique d'import de la Phase 1 (appelée en interne, pas par upload).
+
+**Test d'acceptation obligatoire, pas optionnel** : générer la même seed côté client (ancien chemin) et côté serveur (nouveau chemin), diff `pack`/`grid` — doivent être identiques bit-à-bit avant de faire confiance à la génération serveur pour quoi que ce soit de réel.
+
+**Mise en garde à ne pas perdre en route** : `ErasePipeline` et les chemins Keep/Risk/Resample de l'éditeur de heightmap mutent `pack`/`grid` *en dehors* du pipeline déclaré. Dans cette phase, seul le pipeline complet tourne côté serveur ; les retouches partielles de heightmap restent côté client jusqu'à une phase de suivi dédiée — à traiter explicitement comme hors-scope, pas comme un oubli.
+
+Garder la génération client existante en place (pas supprimée), derrière un flag, jusqu'à validation complète de la parité.
+
+**Vérification** : test de parité seed-à-seed ci-dessus ; `POST /api/maps` avec plusieurs seeds/tailles de carte différentes, vérifier temps de réponse acceptable (pas de file d'attente prévue à ce stade, génération synchrone).
+
+### Phase 4 — Le wiki devient la coquille hôte ; arborescence live
+
+Deux étapes, délibérément séparées de la Phase 5 pour ne jamais avoir "intégration à moitié cassée ET rendu à moitié cassé" en même temps :
+
+1. **Bascule de coquille, même moteur de rendu.** `vite.config.ts` déclare aujourd'hui deux points d'entrée Rollup indépendants (`index.html`/`wiki.html`) sans runtime partagé — confirmé, `src/wiki/map-link.ts` le dit lui-même en commentaire. `wiki.html`/`wiki-main.ts` devient le point d'entrée unique ; la vue carte devient un panneau/une route à l'intérieur plutôt qu'`index.html` séparé. Le bundle de rendu SVG existant n'a pas besoin d'être réécrit à cette étape — il peut rester hébergé tel quel (même en iframe si besoin, juste inversé : wiki dehors, carte dedans), pendant que les *données* qu'il lit viennent progressivement de l'API plutôt que (ou en plus de) la génération client. Ça découple "la carte est dans la coquille wiki" de "la carte est rendue en Leaflet" — un retard sur la Phase 5 ne bloque jamais la livraison de l'intégration.
+2. **Arborescence live** : `src/wiki/entities.ts`'s `loadEntities()` (synchrone, au build) reste pour les fichiers Markdown ; ajouter une source async `loadGeneratedEntities(mapId)` qui normalise les réponses API (burgs/states/provinces/religions/cultures/rivers/markers) dans la même forme `WikiEntity`, avec un slug synthétique déterministe (ex. `burg-142`) pour que les wikilinks à la main puissent cibler une entité générée avant même qu'elle ait un fichier. `wiki-main.ts`'s bootstrap synchrone devient async, fusionnant les deux sources avant le premier `render()` — bonne nouvelle : `buildGraph`, `buildSlugIndex`, le filtrage par ère, et les fonctions de rendu n'ont besoin d'aucun changement, ils opèrent déjà sur un `WikiEntity[]` plat, agnostique de la source une fois fusionné. L'arborescence elle-même vient d'un endpoint imbriqué (`GET /api/maps/:id/entities/tree`), pas de N+1 requêtes, avec expansion paresseuse dans la barre latérale (des centaines de burgs ne doivent pas se rendre d'un coup).
+
+**Risque de rupture à traiter explicitement, pas en aparté** : le système d'ères (`src/wiki/eras.ts`) est aujourd'hui clé sur `Era.mapFile`/`WikiFrontmatter.map_file`, comparé à `?maplink=` (un nom de fichier) dans `currentEraSlug()`. Une fois qu'une ère vit dans Postgres comme ligne `maps`, il faut un champ jumeau `map_id`. Les fichiers wiki existants avec `map_file:` en frontmatter ont besoin soit d'une migration (ajouter `map_id:` une fois chaque ère legacy importée), soit d'une compatibilité acceptant les deux dans `currentEraSlug()`/`resolveEntityForEra()`. C'est une vraie surface de rupture, pas hypothétique — le système d'ères a été construit contre le modèle fichier et cette migration change ce qu'"une ère" *est*.
+
+**Vérification** : les deux ères de démonstration (`wiki/eras/founding.md`, `post-war.md`) continuent de fonctionner après migration du champ ; une entité générée sans fichier apparaît dans l'arborescence, est cliquable, et l'action "développer en fiche" crée un vrai fichier `.md` pré-rempli.
+
+### Phase 5 — Migration Leaflet, incrémentale, par ordre de risque croissant
+
+1. **Couches d'affichage géométrique uniquement**, alimentées par les endpoints GeoJSON de la Phase 3 : biomes, états, provinces, cultures, religions, rivières, routes, burgs, marqueurs — via `L.geoJSON()` sur `L.svg()`. L'API publique de `src/components/layers.ts`'s `LayersRegistry` (show/hide/toggle/move/state/restore) est déjà agnostique du moteur de rendu dans sa forme — réimplémenter `Layer.getEl()`/`init()`/`move()` contre des panes Leaflet au lieu de l'ordre DOM `<g>`, en gardant les ~20 points d'appel dans toute l'app inchangés. Même chose pour `zoomTo(x,y,zoom,duration)` dans `src/components/zoom.ts` — sa signature publique est déjà basée sur des coordonnées, réimplémentable sur `map.setView`/`flyTo` sans toucher ses ~20 points d'appel.
+2. **Délégation de clics** (`src/components/viewbox-events.ts`) : à réécrire, pas à porter — de "remonter 5 niveaux d'ancêtres DOM fixes" vers les événements de clic natifs par-feature de Leaflet (`layer.on('click', ...)`).
+3. **Retrait du système de culling maison** (`src/renderers/viewport/viewport-renderer.ts`) — Leaflet fait ça nativement ; suppression, pas portage, une fois ses consommateurs migrés.
+4. **Le cluster à plus haut risque, budgété comme réécritures complètes, pas comme portages** : `src/controllers/measurers-editor.ts` (règle), `src/controllers/minimap.ts`, `src/controllers/label-spread.ts` (le plus gros — tout un sous-système de conversion écran↔carte), `src/renderers/draw-coordinates.ts` (graticule décoratif — à question ouverte : a-t-il seulement besoin de survivre une fois les conventions natives de Leaflet en place ?). Aucun équivalent à `getScreenCTM()`/`matrixTransform` n'existe dans Leaflet — à réécrire depuis zéro contre `containerPointToLatLng`/`project`/`unproject`. Garder les anciennes versions SVG accessibles derrière un flag jusqu'à parité fonctionnelle de chacune.
+5. `src/services/io/auto-update.ts` (migration des anciens fichiers `.map`, 4 usages de `getTotalLength`/`getPointAtLength`) : cas à part, ne tourne que lors du chargement d'un ancien fichier — peut garder un élément SVG caché/hors-écran juste pour ce calcul même après que le rendu live soit passé à Leaflet. Ne pas porter, isoler.
+
+**Vérification** : chaque couche migrée comparée visuellement à l'ancien rendu SVG sur la même carte ; chaque outil interactif (règle, minimap, placement de labels) testé manuellement pour retrouver son comportement — c'est la phase où une vérification humaine en navigateur est la plus indispensable, aucune suite automatisée ne couvre ce niveau de détail visuel/interactif.
+
+### Phase 6 — Retrait du format legacy (nouvelles cartes seulement)
+
+Une fois la Phase 3 validée, les nouvelles cartes n'ont plus besoin du format positionnel `\r\n` de `save.ts` comme vérité — reformuler l'export `.map` comme une fonctionnalité "télécharger une sauvegarde/un instantané partageable" généré depuis Postgres à la demande, pas la source de vérité. Les anciens fichiers `.map` restent chargeables pour toujours via `load.ts` et sa logique de réparation existante — ne jamais tenter de faire disparaître ce chemin, c'est le seul accès aux données des utilisateurs existants.
+
+---
+
+## Schéma Postgres/PostGIS (concret)
+
+Toutes les colonnes géométrie : SRID 0, indexées GiST. Tables d'entités clées `(map_id, id)` où `id` réutilise l'id assigné par FMG lui-même.
+
+- **`maps`** — `id` PK, `name`, `seed`, `meta` (jsonb), `facts` (jsonb — graph size, geography, climate, cultures.set, lore, units, style preset, coastline, etc. — tout le bloc `facts` de `future-data-model.md`), `layers` (jsonb), `style` (jsonb), `created_at`, `updated_at`.
+- **`map_cells`** — `(map_id, cell_id)` PK, `geom geometry(Polygon,0)`, `height`, `biome_id`, `state_id`, `province_id`, `culture_id`, `religion_id`, `population`, `neighbors int[]`.
+- **`map_states`** — `(map_id, state_id)` PK, `name`, `color`, `culture_id`, `capital_burg_id`, `form`, `geom geometry(MultiPolygon,0)`.
+- **`map_provinces`** — `(map_id, province_id)` PK, `state_id` FK, `name`, `color`, `geom geometry(MultiPolygon,0)`.
+- **`map_cultures`** — `(map_id, culture_id)` PK, `name`, `color`, `geom geometry(MultiPolygon,0)`.
+- **`map_religions`** — `(map_id, religion_id)` PK, `name`, `type`, `color`, `geom geometry(MultiPolygon,0)`.
+- **`map_burgs`** — `(map_id, burg_id)` PK, `name`, `cell_id`, `state_id`, `province_id`, `culture_id`, `religion_id`, `population`, `type`, `capital bool`, `port bool`, `geom geometry(Point,0)`.
+- **`map_rivers`** — `(map_id, river_id)` PK, `name`, `type`, `discharge`, `width`, `geom geometry(LineString,0)`.
+- **`map_routes`** — `(map_id, route_id)` PK, `group_name`, `geom geometry(LineString,0)`.
+- **`map_markers`** — `(map_id, marker_id)` PK, `type`, `name`, `icon`, `geom geometry(Point,0)`.
+- **`map_zones`** — `(map_id, zone_id)` PK, `type`, `geom geometry(MultiPolygon,0)`.
+- **`map_annotations`** — `(map_id, id)` PK, `kind` (`note`|`ruler`), `data jsonb`.
+- **`map_topology`** — `(map_id)` PK, `grid jsonb`, `pack jsonb` — tableaux bruts d'adjacence/vertex non capturés par la géométrie de `map_cells`, conservés pour fidélité exacte (les chemins Keep/Risk/Resample de l'éditeur de heightmap mutent ceci hors pipeline — ne pas supposer que c'est reproductible depuis seed+facts seuls).
+
+## Surface API
+
+- `GET /api/maps` — liste (id, name, seed, createdAt).
+- `POST /api/maps` — génère (corps calqué sur `options.generation`), tourne le pipeline côté serveur, réponse synchrone (pas de file d'attente nécessaire en local mono-utilisateur, sauf si le temps de génération l'impose).
+- `GET /api/maps/:id` — `meta`/`facts`/`layers`/`style`.
+- `GET /api/maps/:id/layers/:layer.geojson` — un `FeatureCollection` par couche.
+- `GET /api/maps/:id/entities/tree` — hiérarchie imbriquée pour la barre latérale du wiki.
+- `GET /api/maps/:id/entities/:kind/:id` — détail d'une entité (vue wiki + préremplissage `map_ref`).
+- `PATCH /api/maps/:id/entities/:kind/:id` — édition manuelle post-génération.
+- `DELETE /api/maps/:id`.
+
+---
+
+## Fichiers critiques
+
+- `src/generators/pipeline.ts`, `src/generators/generation-pipeline.ts` — le runner à invoquer côté serveur (Phase 3).
+- `src/services/io/export.ts` — les exporteurs GeoJSON à porter dans l'ETL Postgres (Phase 1).
+- `docs/architecture/future-data-model.md`, `docs/architecture/configuration.md` — les contrats de schéma/scope de config à refléter dans les tables et payloads API.
+- `src/wiki-main.ts`, `src/wiki/entities.ts`, `src/wiki/eras.ts` — logique de chargement/routage/ères à rendre asynchrone et hybride (Phase 4).
+- `src/components/layers.ts`, `src/components/zoom.ts`, `src/components/viewbox-events.ts` — API publiques à réimplémenter contre Leaflet (Phase 5).
+- `src/services/url-params.ts`, `src/components/idle-state.ts`, `src/components/lifecycle.ts` (`regeneratePrompt`/`regenerateMap`) — le changement de la Phase 0 (fait).
+- `vite.config.ts` — les deux points d'entrée à fusionner en Phase 4.
+
+## Notes de risque global
+
+- Le plus gros poste de risque et d'effort est de loin la **Phase 5 (Leaflet)** — environ 85-90 fichiers touchent des API SVG directement, contre un seul vrai blocage pour le portage serveur de la génération. À budgéter en conséquence : c'est réalistement le chantier le plus long du plan, largement devant la mise en place de Postgres elle-même.
+- Chaque phase a une vérification qui lui est propre ; à partir de la Phase 5, une vérification manuelle en navigateur devient indispensable (le projet a pour règle de ne jamais lancer Playwright automatiquement) — prévoir des passes de test manuel dédiées, pas seulement `tsc`/lint/build/tests unitaires.
