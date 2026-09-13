@@ -7,6 +7,7 @@ import {
   type SimulationNodeDatum,
   select
 } from "d3";
+import { dbRefOf, fetchAvailableMaps, loadGeneratedEntities, type MapSummary } from "@/wiki/db-entities";
 import {
   createEntity,
   isFileSystemAccessSupported,
@@ -27,13 +28,26 @@ import {
   type WikiGraph
 } from "@/wiki/types";
 
-let entities: WikiEntity[] = loadEntities();
+// Two independent entity sources, merged into `entities` below — see src/wiki/db-entities.ts and
+// MIGRATION.md Phase 4.2. Each source reloads on its own; neither wipes the other out.
+let fileEntities: WikiEntity[] = loadEntities();
+let dbEntities: WikiEntity[] = [];
+let entities: WikiEntity[] = fileEntities;
 let graph: WikiGraph = buildGraph(entities);
 let slugIndex = buildSlugIndex(entities);
 let eras: Era[] = loadEras(entities);
 let handles = new Map<string, FileSystemFileHandle>();
 let rawContents = new Map<string, string>();
 let dirHandle: FileSystemDirectoryHandle | undefined;
+
+const API_BASE = "http://127.0.0.1:3001";
+
+function mergeEntitySources(): void {
+  entities = [...fileEntities, ...dbEntities];
+  graph = buildGraph(entities);
+  slugIndex = buildSlugIndex(entities);
+  eras = loadEras(entities);
+}
 
 /** Sticky UI state, not solely URL-derived: browsing via wikilinks shouldn't reset the chosen era */
 let activeEra: string | undefined = new URL(location.href).searchParams.get("era") ?? undefined;
@@ -69,13 +83,57 @@ function currentRoute(): Route {
 async function reloadFromDirectory(): Promise<void> {
   if (!dirHandle) return;
   const source = await loadFromDirectory(dirHandle);
-  entities = source.entities;
+  fileEntities = source.entities;
   handles = source.handles;
   rawContents = source.raw;
-  graph = buildGraph(entities);
-  slugIndex = buildSlugIndex(entities);
-  eras = loadEras(entities);
+  mergeEntitySources();
   renderEraSelect();
+  renderSidebar(el<HTMLInputElement>("search").value);
+}
+
+async function loadDatabaseEntities(mapId: number): Promise<void> {
+  dbEntities = await loadGeneratedEntities(API_BASE, mapId);
+  mergeEntitySources();
+  el<HTMLElement>("db-indicator").textContent = `DB: map #${mapId} (${dbEntities.length} entities)`;
+  renderEraSelect();
+  renderSidebar(el<HTMLInputElement>("search").value);
+}
+
+function renderConnectDatabaseView(): void {
+  const content = el<HTMLElement>("content");
+  content.innerHTML = `<h1>Connect to map database</h1><p>Loading available maps…</p>`;
+
+  fetchAvailableMaps(API_BASE)
+    .then((maps: MapSummary[]) => {
+      if (!maps.length) {
+        content.innerHTML = `<h1>Connect to map database</h1><p>No maps yet — generate or import one first (see <code>server/README.md</code>).</p>`;
+        return;
+      }
+
+      content.innerHTML = `
+        <h1>Connect to map database</h1>
+        <label>Map:
+          <select id="db-map-select">
+            ${maps.map(map => `<option value="${map.id}">${map.name} (seed ${map.seed})</option>`).join("")}
+          </select>
+        </label>
+        <button id="db-connect-btn" type="button">Connect</button>
+      `;
+
+      el<HTMLButtonElement>("db-connect-btn").addEventListener("click", async () => {
+        const mapId = Number(el<HTMLSelectElement>("db-map-select").value);
+        await loadDatabaseEntities(mapId);
+        render();
+      });
+    })
+    .catch((error: Error) => {
+      content.innerHTML = `
+        <h1>Connect to map database</h1>
+        <p class="wiki-link-broken">Could not reach the API at ${API_BASE} — is the server running?
+        (<code>cd server && npm run start</code>)</p>
+        <p class="summary">${error.message}</p>
+      `;
+    });
   renderSidebar(el<HTMLInputElement>("search").value);
 }
 
@@ -174,12 +232,14 @@ function renderEntityView(slug: string): void {
   const tags = (frontmatter.tags ?? []).map(tag => `<span class="tag">${tag}</span>`).join(" ");
   const canEdit = dirHandle && handles.has(slug);
   const mapHref = mapViewHref(resolved.mapRef);
+  const dbRef = dbRefOf(entity);
 
   content.innerHTML = `
     <header class="entity-header">
       <h1>${frontmatter.title}</h1>
       <div class="entity-meta">
         <span class="type-badge">${frontmatter.type}</span>
+        ${dbRef ? `<span class="map-ref-badge">from map #${dbRef.mapId}</span>` : ""}
         ${mapRefBadge}
         ${tags}
       </div>
@@ -187,6 +247,7 @@ function renderEntityView(slug: string): void {
       <div class="entity-actions">
         ${mapHref ? `<a href="${mapHref}" target="_blank" rel="noopener">View on map ↗</a>` : ""}
         ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
+        ${dbRef ? `<a href="#/new?title=${encodeURIComponent(frontmatter.title)}">Write a lore page for this ↗</a>` : ""}
       </div>
     </header>
     ${renderRelations(frontmatter.relations)}
@@ -393,6 +454,8 @@ function initToolbar(): void {
     el<HTMLElement>("live-indicator").textContent = `Editing: ${dir.name}/`;
     render();
   });
+
+  el<HTMLButtonElement>("connect-db-btn").addEventListener("click", renderConnectDatabaseView);
 
   el<HTMLButtonElement>("toggle-graph-btn").addEventListener("click", () => {
     const panel = el<HTMLElement>("graph-panel");

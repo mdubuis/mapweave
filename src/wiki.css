@@ -47,7 +47,8 @@ body {
 #wiki-header button {
   width: 100%;
 }
-#live-indicator {
+#live-indicator,
+#db-indicator {
   display: block;
   font-size: 0.75rem;
   color: var(--muted);
