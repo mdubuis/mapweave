@@ -54,7 +54,8 @@ body {
   margin-top: 0.25rem;
 }
 
-#search {
+#search,
+#era-select {
   width: 100%;
   padding: 0.4rem;
   background: var(--bg);
@@ -119,6 +120,10 @@ body {
 .map-ref-badge {
   color: var(--accent);
   border-color: var(--accent);
+}
+.map-ref-badge.muted {
+  color: var(--muted);
+  border-color: var(--border);
 }
 .summary {
   color: var(--muted);

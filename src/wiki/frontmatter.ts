@@ -46,7 +46,7 @@ function parseYamlLite(text: string): Record<string, unknown> {
       }
 
       const trimmed = lines[pos].slice(lineIndent);
-      const kvMatch = trimmed.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
+      const kvMatch = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
       if (!kvMatch) {
         pos++;
         continue;

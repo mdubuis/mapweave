@@ -7,9 +7,17 @@ aliases: [Oldport, The Port]
 relations:
   member_of: silver-compact
 map_ref:
-  kind: burg
-  id: 7
-  name: Old Port
+  founding:
+    kind: burg
+    id: 7
+    name: Old Port
+  post-war:
+    kind: burg
+    id: 7
+    name: Old Port
+eras:
+  post-war:
+    summary: A besieged ruin at the mouth of the Silt Delta.
 ---
 
 Old Port sits where the Silt river meets the sea, its docks crowded with the boats of a dozen

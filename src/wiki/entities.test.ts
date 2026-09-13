@@ -14,16 +14,22 @@ describe("parseEntityFile", () => {
     expect(entity.frontmatter.type).toBe("note");
   });
 
-  it("parses a valid map_ref", () => {
-    const raw = "---\ntitle: Old Port\nmap_ref:\n  kind: burg\n  id: 42\n  name: Old Port\n---\n";
+  it("parses a valid era-keyed map_ref", () => {
+    const raw = "---\ntitle: Old Port\nmap_ref:\n  founding:\n    kind: burg\n    id: 42\n    name: Old Port\n---\n";
     const entity = parseEntityFile("wiki/old-port.md", raw);
-    expect(entity.frontmatter.map_ref).toEqual({ kind: "burg", id: 42, name: "Old Port" });
+    expect(entity.frontmatter.map_ref).toEqual({ founding: { kind: "burg", id: 42, name: "Old Port" } });
   });
 
-  it("drops a map_ref with an unknown kind rather than passing it through untyped", () => {
-    const raw = "---\nmap_ref:\n  kind: castle\n  id: 1\n---\n";
+  it("drops an era entry with an unknown kind rather than passing it through untyped", () => {
+    const raw = "---\nmap_ref:\n  founding:\n    kind: castle\n    id: 1\n---\n";
     const entity = parseEntityFile("wiki/x.md", raw);
     expect(entity.frontmatter.map_ref).toBeUndefined();
+  });
+
+  it("parses eras field overrides", () => {
+    const raw = "---\neras:\n  post-war:\n    summary: A besieged ruin.\n---\n";
+    const entity = parseEntityFile("wiki/x.md", raw);
+    expect(entity.frontmatter.eras).toEqual({ "post-war": { summary: "A besieged ruin." } });
   });
 });
 

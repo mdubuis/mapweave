@@ -4,7 +4,7 @@
  * only adds the ability to read/write those same files live from a user-picked local folder.
  */
 import { parseEntityFile } from "./entities";
-import type { MapRef, WikiEntity } from "./types";
+import { DEFAULT_ERA, type MapRef, type WikiEntity } from "./types";
 
 export interface LiveEntitySource {
   entities: WikiEntity[];
@@ -74,14 +74,15 @@ export async function createEntity(
   dir: FileSystemDirectoryHandle,
   title: string,
   type: string,
-  mapRef?: MapRef
+  mapRef?: MapRef,
+  era?: string
 ): Promise<{ slug: string }> {
   const slug = slugify(title);
   const folder = await dir.getDirectoryHandle(`${type}s`, { create: true });
   const handle = await folder.getFileHandle(`${slug}.md`, { create: true });
   const mapRefBlock = mapRef
-    ? `map_ref:\n  kind: ${mapRef.kind}\n  id: ${mapRef.id}\n  name: ${mapRef.name}\n${
-        mapRef.cell !== undefined ? `  cell: ${mapRef.cell}\n` : ""
+    ? `map_ref:\n  ${era ?? DEFAULT_ERA}:\n    kind: ${mapRef.kind}\n    id: ${mapRef.id}\n    name: ${mapRef.name}\n${
+        mapRef.cell !== undefined ? `    cell: ${mapRef.cell}\n` : ""
       }`
     : "";
   await saveEntity(handle, `---\ntitle: ${title}\ntype: ${type}\n${mapRefBlock}---\n\n`);

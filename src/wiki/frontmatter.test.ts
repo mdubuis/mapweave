@@ -38,6 +38,14 @@ describe("parseFrontmatter", () => {
     expect(data.map_ref).toEqual({ kind: "burg", id: 42, name: "Old Port" });
   });
 
+  it("parses two levels of nested maps with hyphenated keys", () => {
+    const raw = ["---", "map_ref:", "  post-war:", "    kind: burg", "    id: 7", "---", ""].join("\n");
+
+    const { data } = parseFrontmatter(raw);
+
+    expect(data.map_ref).toEqual({ "post-war": { kind: "burg", id: 7 } });
+  });
+
   it("treats a missing closing marker as no frontmatter", () => {
     const raw = "---\ntitle: Broken\nNo closing marker here.";
     expect(parseFrontmatter(raw)).toEqual({ data: {}, content: raw });

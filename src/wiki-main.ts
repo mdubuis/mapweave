@@ -15,16 +15,28 @@ import {
   saveEntity
 } from "@/wiki/editor";
 import { buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
+import { type Era, isEntityInEra, loadEras, resolveEntityForEra } from "@/wiki/eras";
 import { buildGraph } from "@/wiki/graph";
 import { renderMarkdown } from "@/wiki/markdown";
-import type { EdgeKind, MapRef, MapRefKind, WikiEntity, WikiGraph } from "@/wiki/types";
+import {
+  DEFAULT_ERA,
+  type EdgeKind,
+  type MapRef,
+  type MapRefKind,
+  type WikiEntity,
+  type WikiGraph
+} from "@/wiki/types";
 
 let entities: WikiEntity[] = loadEntities();
 let graph: WikiGraph = buildGraph(entities);
 let slugIndex = buildSlugIndex(entities);
+let eras: Era[] = loadEras(entities);
 let handles = new Map<string, FileSystemFileHandle>();
 let rawContents = new Map<string, string>();
 let dirHandle: FileSystemDirectoryHandle | undefined;
+
+/** Sticky UI state, not solely URL-derived: browsing via wikilinks shouldn't reset the chosen era */
+let activeEra: string | undefined = new URL(location.href).searchParams.get("era") ?? undefined;
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const byslug = (slug: string) => entities.find(e => e.slug === slug);
@@ -43,6 +55,8 @@ function currentRoute(): Route {
     const mapKind = params.get("mapKind");
     const mapId = params.get("mapId");
     const mapCell = params.get("mapCell");
+    const mapEra = params.get("mapEra");
+    if (mapEra) activeEra = mapEra; // arriving from a map click: adopt that era as the browsing context too
     const mapRef =
       mapKind && MAP_REF_KINDS.includes(mapKind as MapRefKind) && mapId
         ? { kind: mapKind as MapRefKind, id: Number(mapId), name: title, cell: mapCell ? Number(mapCell) : undefined }
@@ -60,7 +74,21 @@ async function reloadFromDirectory(): Promise<void> {
   rawContents = source.raw;
   graph = buildGraph(entities);
   slugIndex = buildSlugIndex(entities);
+  eras = loadEras(entities);
+  renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
+}
+
+function renderEraSelect(): void {
+  const eraSelect = el<HTMLSelectElement>("era-select");
+  if (!eras.length) {
+    eraSelect.hidden = true;
+    return;
+  }
+  eraSelect.hidden = false;
+  eraSelect.innerHTML = `<option value="">All eras</option>${eras
+    .map(era => `<option value="${era.slug}"${era.slug === activeEra ? " selected" : ""}>${era.label}</option>`)
+    .join("")}`;
 }
 
 function renderSidebar(filter = ""): void {
@@ -69,6 +97,7 @@ function renderSidebar(filter = ""): void {
   const needle = filter.toLowerCase();
 
   for (const entity of entities) {
+    if (activeEra && !isEntityInEra(entity, activeEra)) continue;
     const haystack = `${entity.frontmatter.title} ${(entity.frontmatter.tags ?? []).join(" ")}`.toLowerCase();
     if (needle && !haystack.includes(needle)) continue;
     const group = grouped.get(entity.frontmatter.type) ?? [];
@@ -98,11 +127,11 @@ function renderSidebar(filter = ""): void {
   }
 }
 
-function renderRelations(entity: WikiEntity): string {
-  const relations = Object.entries(entity.frontmatter.relations ?? {});
-  if (!relations.length) return "";
+function renderRelations(relations: Record<string, string> | undefined): string {
+  const entries = Object.entries(relations ?? {});
+  if (!entries.length) return "";
 
-  const items = relations
+  const items = entries
     .map(([label, target]) => {
       const resolved = resolveLink(target);
       const readable = label.replace(/_/g, " ");
@@ -131,29 +160,36 @@ function renderEntityView(slug: string): void {
     return;
   }
 
-  const mapRef = entity.frontmatter.map_ref;
-  const mapRefBadge = mapRef
-    ? `<span class="map-ref-badge">map: ${mapRef.kind} #${mapRef.id} (${mapRef.name})</span>`
-    : "";
-  const tags = (entity.frontmatter.tags ?? []).map(tag => `<span class="tag">${tag}</span>`).join(" ");
+  const resolved = activeEra
+    ? resolveEntityForEra(entity, activeEra)
+    : { frontmatter: entity.frontmatter, mapRef: undefined };
+  const { frontmatter } = resolved;
+  const eraCount = Object.keys(entity.frontmatter.map_ref ?? {}).length;
+
+  const mapRefBadge = resolved.mapRef
+    ? `<span class="map-ref-badge">map: ${resolved.mapRef.kind} #${resolved.mapRef.id} (${resolved.mapRef.name})</span>`
+    : !activeEra && eraCount
+      ? `<span class="map-ref-badge muted">linked on ${eraCount} era${eraCount === 1 ? "" : "s"} — pick one to view</span>`
+      : "";
+  const tags = (frontmatter.tags ?? []).map(tag => `<span class="tag">${tag}</span>`).join(" ");
   const canEdit = dirHandle && handles.has(slug);
-  const mapHref = mapViewHref(mapRef);
+  const mapHref = mapViewHref(resolved.mapRef);
 
   content.innerHTML = `
     <header class="entity-header">
-      <h1>${entity.frontmatter.title}</h1>
+      <h1>${frontmatter.title}</h1>
       <div class="entity-meta">
-        <span class="type-badge">${entity.frontmatter.type}</span>
+        <span class="type-badge">${frontmatter.type}</span>
         ${mapRefBadge}
         ${tags}
       </div>
-      ${entity.frontmatter.summary ? `<p class="summary">${entity.frontmatter.summary}</p>` : ""}
+      ${frontmatter.summary ? `<p class="summary">${frontmatter.summary}</p>` : ""}
       <div class="entity-actions">
         ${mapHref ? `<a href="${mapHref}" target="_blank" rel="noopener">View on map ↗</a>` : ""}
         ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
       </div>
     </header>
-    ${renderRelations(entity)}
+    ${renderRelations(frontmatter.relations)}
     <article class="entity-body">${renderMarkdown(entity.body, resolveLink)}</article>
   `;
 
@@ -222,7 +258,7 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
 
   el<HTMLButtonElement>("create-btn").addEventListener("click", async () => {
     const type = el<HTMLSelectElement>("new-type").value;
-    const { slug } = await createEntity(dirHandle!, title, type, mapRef);
+    const { slug } = await createEntity(dirHandle!, title, type, mapRef, activeEra ?? DEFAULT_ERA);
     await reloadFromDirectory();
     location.hash = `#/entity/${encodeURIComponent(slug)}`;
   });
@@ -238,6 +274,8 @@ function renderHomeView(): void {
 
 function render(): void {
   const route = currentRoute();
+  renderEraSelect();
+  renderSidebar(el<HTMLInputElement>("search").value);
   if (route.view === "entity") renderEntityView(route.slug);
   else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
   else renderHomeView();
@@ -258,7 +296,8 @@ const TYPE_COLORS: Record<string, string> = {
   character: "#f76e6e",
   faction: "#f7c14f",
   event: "#8a4ff7",
-  item: "#4ff7b8"
+  item: "#4ff7b8",
+  era: "#f7f04f"
 };
 
 function renderGraph(): void {
@@ -268,12 +307,17 @@ function renderGraph(): void {
   const svg = select(svgEl);
   svg.selectAll("*").remove();
 
-  const nodes: GraphNode[] = entities.map(entity => ({
+  const visibleEntities = activeEra ? entities.filter(entity => isEntityInEra(entity, activeEra!)) : entities;
+  const visibleSlugs = new Set(visibleEntities.map(entity => entity.slug));
+
+  const nodes: GraphNode[] = visibleEntities.map(entity => ({
     id: entity.slug,
     title: entity.frontmatter.title,
     type: entity.frontmatter.type
   }));
-  const links: GraphLink[] = graph.edges.map(edge => ({ source: edge.from, target: edge.to, kind: edge.kind }));
+  const links: GraphLink[] = graph.edges
+    .filter(edge => visibleSlugs.has(edge.from) && visibleSlugs.has(edge.to))
+    .map(edge => ({ source: edge.from, target: edge.to, kind: edge.kind }));
 
   forceSimulation(nodes)
     .force(
@@ -330,6 +374,12 @@ function initToolbar(): void {
     renderSidebar((event.target as HTMLInputElement).value);
   });
 
+  el<HTMLSelectElement>("era-select").addEventListener("change", event => {
+    activeEra = (event.target as HTMLSelectElement).value || undefined;
+    renderSidebar(el<HTMLInputElement>("search").value);
+    render();
+  });
+
   const openFolderBtn = el<HTMLButtonElement>("open-folder-btn");
   if (!isFileSystemAccessSupported()) {
     openFolderBtn.disabled = true;
@@ -361,5 +411,4 @@ function initToolbar(): void {
 
 window.addEventListener("hashchange", render);
 initToolbar();
-renderSidebar();
 render();

@@ -2,6 +2,7 @@ import { createRegistry } from "@/utils/registry";
 import "./platform";
 import "./assistant";
 import "./autosave";
+import "./era-switcher";
 import "./fonts";
 import "./url-params";
 import "./versioning";

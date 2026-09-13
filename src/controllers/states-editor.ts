@@ -26,7 +26,7 @@ import { EmblemRenderer } from "@/renderers/emblems/renderer";
 import { fog, unfog } from "@/renderers/overlays/fogging";
 import { highlightElement, highlightOutline } from "@/renderers/overlays/highlight";
 import { applyOption, downloadFile, getArea, getAreaUnit, getFileName, openURL, speak } from "@/utils";
-import { wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
+import { activeEra, wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import {
   ensureEl,
   formatPrice,
@@ -258,7 +258,12 @@ function renderDialog(): void {
     else if (classList.contains("icon-book")) void Controllers.NotesEditor.open({ type: "state", id: stateId });
     else if (classList.contains("icon-link-ext"))
       openURL(
-        wikiLinkHref({ kind: "state", id: stateId, name: pack.states[stateId].name, cell: pack.states[stateId].center })
+        wikiLinkHref(activeEra(), {
+          kind: "state",
+          id: stateId,
+          name: pack.states[stateId].name,
+          cell: pack.states[stateId].center
+        })
       );
     else if (classList.contains("icon-pin")) toggleFog(stateId, classList);
     else if (classList.contains("icon-target"))
@@ -436,7 +441,7 @@ function renderStatesPage(view: TableView<State>): void {
           class="statePower" type="number" min="0" max="99" step=".1" value=${s.expansionism} />
       </div>
       ${Notes.getIcon("this state")}
-      <span data-col="wiki" data-tip="${wikiLinkTip({ kind: "state", id: s.i, name: "" })}" class="icon-link-ext pointer"></span>
+      <span data-col="wiki" data-tip="${wikiLinkTip(activeEra(), { kind: "state", id: s.i })}" class="icon-link-ext pointer"></span>
       <span data-col="locate" data-tip="Locate the state" class="icon-target"></span>
       <span data-col="focus" data-tip="Toggle state focus" class="icon-pin ${focused ? "" : " inactive"}"></span>
       <span data-col="lock" data-tip="Lock the state to protect it from re-generation" class="icon-lock${
