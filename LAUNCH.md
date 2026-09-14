@@ -139,11 +139,11 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and **biomes**, **religions**, and **cultures** are the first layers actually
-rendered by Leaflet (`L.geoJSON()`) rather than hand-drawn SVG — everything else (states,
-provinces, rivers, routes, burgs, markers, the minimap, the ruler) is still on the old code,
-unconverted. There's no visible UI difference to look for beyond those layers — the useful check
-is that nothing *regressed*:
+d3-zoom code, and **biomes**, **religions**, **cultures**, and **provinces** are the first layers
+actually rendered by Leaflet (`L.geoJSON()`) rather than hand-drawn SVG — everything else (states,
+rivers, routes, burgs, markers, the minimap, the ruler) is still on the old code, unconverted.
+There's no visible UI difference to look for beyond those layers — the useful check is that
+nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -166,11 +166,18 @@ is that nothing *regressed*:
 - **Cultures**: switch to the "Cultural" preset. Same checks as Religions in the Cultures editor —
   hover, recolor, "locate", and remove — plus each culture's center marker (a small circle) should
   keep tracking correctly since that part wasn't touched by this conversion.
+- **Provinces**: switch to the "Provinces" preset. In the Provinces editor: hover a row, recolor,
+  "locate", and remove a province — same checks as the others. Two additional ones unique to
+  provinces, both exercising a real bug found and fixed during this conversion (see
+  `MIGRATION.md`): click the fog/focus icon (pin icon) on a province row — it should dim everything
+  outside that province's actual territory, correctly aligned, not offset or oddly scaled; and
+  start a province merge (Merge button) and hover a candidate province — the animated red outline
+  trace should hug that province's real boundary.
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
-`src/renderers/draw-cultures.ts`) and what's still unconverted.
+`src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`) and what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
