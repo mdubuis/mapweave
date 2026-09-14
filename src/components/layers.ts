@@ -98,7 +98,10 @@ export class LayersRegistry<Id extends string = string> {
       if (parent === "leaflet") {
         layer.params.ensurePane?.();
         const pane = findEl(layer.elementId);
-        if (pane) this.setVisible(pane, this.active.has(layer.id));
+        if (pane) {
+          pane.dataset.layer = layer.id; // styles address layers by data-layer, not element id
+          this.setVisible(pane, this.active.has(layer.id));
+        }
         continue;
       }
 

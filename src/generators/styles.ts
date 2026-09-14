@@ -37,11 +37,22 @@ function apply(...ids: StyleLayerId[]): void {
   Layers.draw(...ids.filter((id): id is StyleLayerId & LayerId => id !== "map"));
 }
 
+// CSS properties with the same meaning as their SVG presentation-attribute namesakes — the only
+// ones worth writing onto a Leaflet pane (a plain <div>, not an SVGElement): setAttribute("opacity",
+// ...) on an HTMLElement is a silent no-op, unlike on an SVG group
+const CSS_COMPATIBLE_ATTRS = new Set(["opacity", "filter", "mask"]);
+
 function writeNode(el: Element, node: object): void {
+  const isHtmlElement = !(el instanceof SVGElement);
   for (const [key, value] of Object.entries(node)) {
     if (key === "options") continue;
     if (key === "attrs") {
       for (const [name, v] of Object.entries(value as object)) {
+        if (isHtmlElement && CSS_COMPATIBLE_ATTRS.has(name)) {
+          if (v === null || v === undefined) (el as HTMLElement).style.removeProperty(name);
+          else (el as HTMLElement).style.setProperty(name, String(v));
+          continue;
+        }
         if (v === null || v === undefined) el.removeAttribute(name);
         else el.setAttribute(name, String(v));
       }
