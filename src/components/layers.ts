@@ -28,7 +28,7 @@ import { drawReligions, ensureReligionsPane, eraseReligions } from "@/renderers/
 import { drawRivers } from "@/renderers/draw-rivers";
 import { drawRoutes, removeRoutes } from "@/renderers/draw-routes";
 import { drawScaleBar, removeScaleBar } from "@/renderers/draw-scalebar";
-import { drawStates } from "@/renderers/draw-states";
+import { drawStates, eraseStates } from "@/renderers/draw-states";
 import { drawTemperature } from "@/renderers/draw-temperature";
 import { drawTexture } from "@/renderers/draw-texture";
 import { drawVignette } from "@/renderers/draw-vignette";
@@ -349,8 +349,11 @@ const mapLayers = [
     id: "states",
     element: "regions",
     parent: "viewbox",
-    children: ["statesBody", "statesHalo"].map(id => ({ id, tag: "g" })),
-    draw: drawStates
+    // no "statesBody" child: the fill is a Leaflet layer now (see draw-states.ts) — only the
+    // halo effect still renders into a real SVG child here
+    children: ["statesHalo"].map(id => ({ id, tag: "g" })),
+    draw: drawStates,
+    erase: eraseStates
   }),
   new Layer({
     id: "provinces",

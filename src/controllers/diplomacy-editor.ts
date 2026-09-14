@@ -286,21 +286,21 @@ function showStateRelations(): void {
   if (!sel) return;
   Layers.show("states");
 
-  select<SVGGElement, unknown>("#statesBody")
-    .selectAll<SVGPathElement, unknown>("path")
-    .each(function () {
-      if (this.id.slice(0, 9) === "state-gap") return; // exclude state gap element
-      const id = +this.id.slice(5); // state id
+  // iterate pack.states rather than the rendered elements: the fill is a Leaflet layer now, not a
+  // container this can walk — each state's path still carries id="state{id}" (see territory-layer.ts),
+  // so a direct lookup finds it the same way the hover/hover-off/locate fixes elsewhere already do.
+  // No state-gap coloring: converted layers don't render the water-gap stroke at all (see MIGRATION.md)
+  for (const state of pack.states) {
+    if (!state.i || state.removed) continue;
 
-      const relation = pack.states[id].diplomacy?.[sel] ?? "x";
-      const color = relations[relation]?.color || "#4682b4";
+    const relation = state.diplomacy?.[sel] ?? "x";
+    const color = relations[relation]?.color || "#4682b4";
 
-      this.setAttribute("fill", color);
-      select<SVGGElement, unknown>("#statesBody").select(`#state-gap${id}`).attr("stroke", color);
-      select<SVGGElement, unknown>("#statesHalo")
-        .select(`#state-border${id}`)
-        .attr("stroke", d3Color(color)!.darker().hex());
-    });
+    select(`#state${state.i}`).attr("fill", color);
+    select<SVGGElement, unknown>("#statesHalo")
+      .select(`#state-border${state.i}`)
+      .attr("stroke", d3Color(color)!.darker().hex());
+  }
 }
 
 function selectStateOnMapClick(this: SVGElement, event: MouseEvent): void {

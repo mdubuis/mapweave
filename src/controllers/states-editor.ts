@@ -22,9 +22,10 @@ import type { Province } from "@/generators/provinces-generator";
 import type { State } from "@/generators/states-generator";
 import { redrawEmblem, redrawEmblems, removeEmblem } from "@/renderers/draw-emblems";
 import { clearLegend, drawLegend, hasLegend } from "@/renderers/draw-legend";
+import { getStateBounds, getStatePath } from "@/renderers/draw-states";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
 import { fog, unfog } from "@/renderers/overlays/fogging";
-import { highlightElement, highlightOutline } from "@/renderers/overlays/highlight";
+import { highlightArea, highlightOutline } from "@/renderers/overlays/highlight";
 import { applyOption, downloadFile, getArea, getAreaUnit, getFileName, openURL, speak } from "@/utils";
 import { activeEra, wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import {
@@ -266,9 +267,10 @@ function renderDialog(): void {
         })
       );
     else if (classList.contains("icon-pin")) toggleFog(stateId, classList);
-    else if (classList.contains("icon-target"))
-      highlightElement(select("#regions").select(`#state${stateId}`).node() as Element, 4);
-    else if (classList.contains("icon-trash-empty")) stateRemovePrompt(stateId);
+    else if (classList.contains("icon-target")) {
+      const box = getStateBounds(stateId);
+      if (box) highlightArea(box, 4);
+    } else if (classList.contains("icon-trash-empty")) stateRemovePrompt(stateId);
     else if (classList.contains("icon-lock") || classList.contains("icon-lock-open"))
       updateLockStatus(stateId, classList);
   });
@@ -506,7 +508,8 @@ function stateHighlightOn(event: any): void {
 
   const state = +event.target.dataset.id;
   if (customization || !state) return;
-  highlightOutline(select("#regions").select(`#state${state}`).attr("d"));
+  const d = getStatePath(state);
+  if (d) highlightOutline(d);
 }
 
 function stateHighlightOff(): void {
@@ -956,9 +959,11 @@ function stateChangeExpansionism(state: number, line: HTMLElement, value: string
 
 function toggleFog(state: number, cl: DOMTokenList): void {
   if (customization) return;
-  const path = select("#statesBody").select(`#state${state}`).attr("d");
   const id = `focusState${state}`;
-  cl.contains("inactive") ? fog(id, path) : unfog(id);
+  if (cl.contains("inactive")) {
+    const path = getStatePath(state);
+    if (path) fog(id, path);
+  } else unfog(id);
   cl.toggle("inactive");
 }
 
@@ -1626,7 +1631,7 @@ function openStateMergeDialog(): void {
     if (!Layers.isOn("states")) return;
     const state = +event.currentTarget.dataset.id;
     if (!state) return;
-    const d = select("#regions").select(`#state${state}`).attr("d");
+    const d = getStatePath(state);
     if (!d) return;
 
     stateHighlightOff();
