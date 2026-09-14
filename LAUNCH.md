@@ -139,20 +139,23 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and **biomes**, **religions**, **cultures**, and **provinces** are the first layers
-actually rendered by Leaflet (`L.geoJSON()`) rather than hand-drawn SVG — everything else (states,
-rivers, routes, burgs, markers, the minimap, the ruler) is still on the old code, unconverted.
-There's no visible UI difference to look for beyond those layers — the useful check is that
-nothing *regressed*:
+d3-zoom code, and all five territory layers — **biomes**, **religions**, **cultures**,
+**provinces**, and **states** — are now actually rendered by Leaflet (`L.geoJSON()`) rather than
+hand-drawn SVG. Everything else (rivers, routes, burgs, markers, the minimap, the ruler) is still
+on the old code, unconverted. There's no visible UI difference to look for beyond those layers —
+the useful check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
   load and center correctly.
-- Zoom in enough to trigger label resizing and the state-border halo effect (`shapeRendering` set
-  to something other than `optimizeSpeed` in Options → Interface) — both read `viewport.scale`,
-  which is now fed by Leaflet rather than d3.
+- Zoom in enough to trigger label resizing — reads `viewport.scale`, now fed by Leaflet rather
+  than d3.
 - The minimap (bottom-left, if enabled) should still track the viewport rectangle correctly while
   panning/zooming.
+- Open the Style Editor for Biomes/Religions/Cultures/Provinces and check the opacity slider has a
+  visible effect, and that these layers *aren't* fully opaque by default (this exercises a real,
+  retroactive bug found and fixed — see `MIGRATION.md`). Biomes specifically should never paint
+  over open ocean.
 - **Biomes**: switch to the "Biomes" layer preset (or toggle the biomes layer on from the layers
   panel) — it should render and color exactly as before. In the Biomes editor (bottom toolbar),
   hover a biome row to confirm the highlight-on-hover outline still appears on the map, and change
@@ -173,11 +176,20 @@ nothing *regressed*:
   outside that province's actual territory, correctly aligned, not offset or oddly scaled; and
   start a province merge (Merge button) and hover a candidate province — the animated red outline
   trace should hug that province's real boundary.
+- **States**: default view, no preset switch needed. In the States editor: hover, recolor,
+  "locate", remove, fog/focus, and merge-hover — same checks as Provinces. Two more, unique to
+  states: turn on **Options → Interface → shapeRendering → geometricPrecision** and confirm every
+  state shows a soft blurred border glow that actually follows its territory's real shape (this is
+  the one layer with no direct Leaflet equivalent for this effect — worth a close look); and open
+  the **Diplomacy editor** and confirm every state recolors by its relationship to the selected one
+  (ally/enemy/neutral colors) — this exercises a whole feature found late in this conversion, not
+  just in the States editor itself.
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
-`src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`) and what's still unconverted.
+`src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`)
+and what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
