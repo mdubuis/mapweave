@@ -19,9 +19,10 @@ import { Controllers } from "@/controllers";
 import { CULTURE_TYPES, type Culture } from "@/generators/cultures-generator";
 import { Emblems } from "@/generators/emblems-generator";
 import { Notes } from "@/generators/notes";
+import { getCultureBounds } from "@/renderers/draw-cultures";
 import { clearLegend, drawLegend, hasLegend } from "@/renderers/draw-legend";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
-import { highlightElement } from "@/renderers/overlays/highlight";
+import { highlightArea } from "@/renderers/overlays/highlight";
 import type { Emblem } from "@/types/emblems";
 import { downloadFile, getArea, getAreaUnit, getFileName } from "@/utils";
 import { abbreviate, capitalize, debounce, ensureEl, getPointer, isLand, parseTransform, ra, rn, si } from "../utils";
@@ -453,12 +454,7 @@ const cultureHighlightOn = debounce((event: any) => {
   if (customization) return;
 
   const animate = transition().duration(2000).ease(easeSinIn);
-  select("#cults")
-    .select(`#culture${cultureId}`)
-    .raise()
-    .transition(animate)
-    .attr("stroke-width", 2.5)
-    .attr("stroke", "#d0240f");
+  select(`#culture${cultureId}`).raise().transition(animate).attr("stroke-width", 2.5).attr("stroke", "#d0240f");
   select("#debug")
     .select(`#cultureCenter${cultureId}`)
     .raise()
@@ -471,7 +467,7 @@ function cultureHighlightOff(event: any): void {
   const cultureId = Number(event.id || event.target.dataset.id);
 
   if (!Layers.isOn("cultures")) return;
-  select("#cults").select(`#culture${cultureId}`).transition().attr("stroke-width", null).attr("stroke", null);
+  select(`#culture${cultureId}`).transition().attr("stroke-width", null).attr("stroke", null);
   select("#debug").select(`#cultureCenter${cultureId}`).transition().attr("r", 2).attr("stroke", null);
 }
 
@@ -482,7 +478,7 @@ function cultureChangeColor(this: FillBoxElement): void {
   const callback = (newFill: string) => {
     this.fill = newFill;
     pack.cultures[cultureId].color = newFill;
-    select("#cults").select(`#culture${cultureId}`).attr("fill", newFill);
+    Layers.draw("cultures");
     select("#debug").select(`#cultureCenter${cultureId}`).attr("fill", newFill);
   };
 
@@ -701,7 +697,6 @@ function cultureRegenerateBurgs(this: HTMLElement): void {
 }
 
 function removeCulture(cultureId: number): void {
-  select("#cults").select(`#culture${cultureId}`).remove();
   select("#debug").select(`#cultureCenter${cultureId}`).remove();
 
   const { burgs, states, cells, cultures } = pack as any;
@@ -725,6 +720,11 @@ function removeCulture(cultureId: number): void {
       c.origins = (c.origins ?? []).filter((origin: number) => origin !== cultureId);
       if (!c.origins.length) c.origins = [0];
     });
+
+  // a Leaflet-backed layer: removing one feature's DOM node directly would desync Leaflet's own
+  // bookkeeping, unlike the old plain-SVG version — a full redraw is the safe way to reflect this
+  Layers.draw("cultures");
+
   refreshCulturesEditor();
 }
 
@@ -735,7 +735,8 @@ function editCultureNote(this: HTMLElement): void {
 
 function cultureHighlightElement(this: HTMLElement): void {
   const cultureId = +(this.closest(".states") as HTMLElement).dataset.id!;
-  highlightElement(select("#cults").select(`#culture${cultureId}`).node() as Element, 4);
+  const box = getCultureBounds(cultureId);
+  if (box) highlightArea(box, 4);
 }
 
 function cultureRemovePrompt(this: HTMLElement): void {

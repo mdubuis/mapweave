@@ -39,7 +39,7 @@ Trois recherches approfondies (rendu SVG, persistance/génération, dépendances
 | 2 | Serveur API Node, lecture seule sur Postgres | Phase 1 | Moyen | Non — purement additif | **Fait** |
 | 3 | Génération portée sur Node, `POST /api/maps` génère côté serveur | Phase 2 | **Élevé** | Seulement si la parité seed-à-seed n'est pas validée | **Fait*** |
 | 4 | Le wiki devient la coquille hôte ; carte intégrée (encore en SVG) ; arborescence live | Phase 2 | Moyen | Oui, au système d'ères et aux `map_ref` — voir plus bas | **Fait*** (*jumelage ères/`map_id` volontairement reporté, voir plus bas) |
-| 5 | Migration Leaflet, incrémentale, couche par couche | Phase 3 + Phase 4 | **Le plus élevé** (~85-90 fichiers) | Outils interactifs (règle, minimap, labels) les plus exposés | **En cours** (caméra + `biomes` + `religions` faits ; provinces/cultures/states/rivers/routes/burgs/marqueurs pas encore) |
+| 5 | Migration Leaflet, incrémentale, couche par couche | Phase 3 + Phase 4 | **Le plus élevé** (~85-90 fichiers) | Outils interactifs (règle, minimap, labels) les plus exposés | **En cours** (caméra + `biomes` + `religions` + `cultures` faits ; provinces/states/rivers/routes/burgs/marqueurs pas encore) |
 | 6 | Retrait du format legacy pour les *nouvelles* cartes seulement | Phase 3 | Faible | Non si bien scopé | À faire |
 
 ### Phase 0 — Génération manuelle (à faire en premier, indépendamment de tout le reste) — **Fait**
@@ -143,8 +143,13 @@ Deux décisions de scope prises **pendant** cette phase, avant d'écrire du code
 - **Vérifié** : `tsc --noEmit` propre, lint propre, 1024/1024 tests passent, build Vite complet — et cette fois-ci, zéro fichier de test supplémentaire n'a eu besoin du mock `leaflet` (contrairement à `biomes`, qui en avait fait tomber 7).
 - **Reste à vérifier par un humain** : rendu, survol, recoloration, suppression, et le bouton "localiser" d'une religion dans un vrai navigateur.
 
+**Couche `cultures` convertie et vérifiée** — même gabarit que `religions`, quasiment sans surprise cette fois :
+- `createTerritoryLayer("cultures-leaflet", 102, "culture")`. `cultures-editor.ts` avait exactement la même forme de couplage que `religions-editor.ts` (survol via `#cults > #culture{id}`, recoloration en direct, suppression, `highlightElement`/`getBBox` pour "localiser", plus un marqueur séparé `#cultureCenter{id}` dans `#debug`, inchangé) — les cinq points corrigés de façon identique : lookups simplifiés en `#culture{id}` seul, recoloration et suppression basculées sur `Layers.draw("cultures")`, "localiser" basculé sur `getCultureBounds()`/`highlightArea()` (nouveau `TerritoryLayerHandle.getFeatureBounds` réutilisé tel quel, pas de nouveau code de conversion de coordonnées).
+- **Vérifié** : `tsc --noEmit` propre, lint propre, 1024/1024 tests passent, build Vite complet — encore une fois, aucun fichier de test supplémentaire cassé.
+- **Reste à vérifier par un humain** : même liste que `religions` (rendu, survol, recoloration, suppression, "localiser") dans un vrai navigateur.
+
 **Ce qui reste, explicitement pas encore fait** :
-1. `provinces`/`cultures`/`states` — même gabarit que `religions` maintenant (recoloration en direct + suppression à corriger pareillement). `provinces-editor.ts`/`cultures-editor.ts` ont plus de points de couplage que `religions-editor.ts` n'en avait (émblèmes/COA pour les provinces, un marqueur `#cultureCenter{id}` séparé pour les cultures) — auditer chaque fichier avant de convertir, ne pas supposer que le gabarit `religions` suffit tel quel. `states-editor.ts`/`draw-states.ts` a en plus son propre effet de halo (`<clipPath>` + `<use href="#state{id}">`) sans équivalent Leaflet direct, non revalidé.
+1. `provinces`/`states` — `provinces-editor.ts` a en plus des émblèmes/COA à vérifier avant de supposer que le gabarit `religions`/`cultures` suffit tel quel. `states-editor.ts`/`draw-states.ts` a son propre effet de halo (`<clipPath>` + `<use href="#state{id}">`) sans équivalent Leaflet direct, non revalidé.
 2. `rivers`/`routes`/`burgs`/`marqueurs` : pas de simple portage — `draw-rivers.ts` a son propre polygone en ruban à largeur variable (pas une simple `LineString`), la coloration par bassin, le culling `ViewportLayers`, et le re-rendu incrémental d'une seule rivière en cours d'édition ; à budgéter comme des réécritures, pas des conversions mécaniques.
 3. La délégation de clics (`viewbox-events.ts`) pour `rivers`/`routes`/`burgIcons`/`markers` vers des clics natifs par-feature Leaflet, une fois ces couches converties.
 4. La reconstruction de la minimap (`src/controllers/minimap.ts`) : sa technique actuelle (`<use href="#viewbox">`) ne reflèterait plus les couches converties, puisqu'elles ne vivraient plus dans `#viewbox`.

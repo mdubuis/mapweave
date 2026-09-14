@@ -5,7 +5,7 @@ import { drawBurgIcons } from "@/renderers/draw-burg-icons";
 import { drawCells } from "@/renderers/draw-cells";
 import { drawCoastline } from "@/renderers/draw-coastline";
 import { drawCoordinates } from "@/renderers/draw-coordinates";
-import { drawCultures } from "@/renderers/draw-cultures";
+import { drawCultures, ensureCulturesPane, eraseCultures } from "@/renderers/draw-cultures";
 import { drawEmblems, removeEmblems } from "@/renderers/draw-emblems";
 import { drawGoods } from "@/renderers/draw-goods";
 import { drawGrid } from "@/renderers/draw-grid";
@@ -334,7 +334,14 @@ const mapLayers = [
     erase: eraseReligions,
     ensurePane: ensureReligionsPane
   }),
-  new Layer({ id: "cultures", element: "cults", parent: "viewbox", draw: drawCultures }),
+  new Layer({
+    id: "cultures",
+    element: "cultures-leaflet",
+    parent: "leaflet",
+    draw: drawCultures,
+    erase: eraseCultures,
+    ensurePane: ensureCulturesPane
+  }),
   new Layer({
     id: "states",
     element: "regions",
