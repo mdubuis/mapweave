@@ -139,11 +139,11 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and **biomes** and **religions** are the first two layers actually rendered by
-Leaflet (`L.geoJSON()`) rather than hand-drawn SVG — everything else (states, provinces, cultures,
-rivers, routes, burgs, markers, the minimap, the ruler) is still on the old code, unconverted.
-There's no visible UI difference to look for beyond those two layers — the useful check is that
-nothing *regressed*:
+d3-zoom code, and **biomes**, **religions**, and **cultures** are the first layers actually
+rendered by Leaflet (`L.geoJSON()`) rather than hand-drawn SVG — everything else (states,
+provinces, rivers, routes, burgs, markers, the minimap, the ruler) is still on the old code,
+unconverted. There's no visible UI difference to look for beyond those layers — the useful check
+is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -163,11 +163,14 @@ nothing *regressed*:
   zoom/pan to that religion's territory — this exercises a real coordinate-space bug found and
   fixed during this conversion, see `MIGRATION.md`), and remove a religion (its territory should
   disappear from the map, not just the editor list).
+- **Cultures**: switch to the "Cultural" preset. Same checks as Religions in the Cultures editor —
+  hover, recolor, "locate", and remove — plus each culture's center marker (a small circle) should
+  keep tracking correctly since that part wasn't touched by this conversion.
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
-`src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`) and
-what's still unconverted.
+`src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
+`src/renderers/draw-cultures.ts`) and what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
