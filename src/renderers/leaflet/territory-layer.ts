@@ -26,6 +26,13 @@ export interface TerritoryLayerHandle {
    * own coordinates are zoom-dependent.
    */
   getFeatureBounds(id: number): DOMRect | undefined;
+  /**
+   * World-space SVG path `d` string for one feature — same reasoning as `getFeatureBounds`, for old
+   * code that read a rendered element's own `d` attribute directly (a fog-of-war mask cutout, a
+   * traced highlight outline) and needs it in world space, not the current pan/zoom's pixel space.
+   * One `M...Z` subpath per ring, same convention the old SVG renderers used (no hole nesting).
+   */
+  getFeaturePath(id: number): string | undefined;
 }
 
 /**
@@ -53,6 +60,15 @@ export function createTerritoryLayer(paneName: string, zIndex: number, idPrefix:
       const element = (layer as L.Path).getElement();
       if (element) element.id = `${idPrefix}${feature.properties.id}`;
     });
+  };
+
+  const findFeature = (id: number): Feature | undefined => {
+    let found: Feature | undefined;
+    geoJsonLayer?.eachLayer(sublayer => {
+      const feature = (sublayer as L.Path & { feature: Feature }).feature;
+      if (feature.properties.id === id) found = feature;
+    });
+    return found;
   };
 
   return {
@@ -87,6 +103,18 @@ export function createTerritoryLayer(paneName: string, zIndex: number, idPrefix:
       const x0 = bounds.getWest();
       const y0 = bounds.getSouth();
       return new DOMRect(x0, y0, bounds.getEast() - x0, bounds.getNorth() - y0);
+    },
+    getFeaturePath(id) {
+      const feature = findFeature(id);
+      if (!feature) return undefined;
+
+      return feature.geometry.coordinates
+        .map(([ring]) => {
+          const points = ring.map(([x, y]) => `${x},${y}`);
+          const first = points.shift();
+          return `M${first} L${points.join(" ")} Z`;
+        })
+        .join("");
     }
   };
 }

@@ -1,13 +1,31 @@
-import { ensureEl, getIsolines } from "@/utils";
-import { buildFillPaths } from "./isoline-fills";
+import { createTerritoryLayer } from "@/renderers/leaflet/territory-layer";
+
+const layer = createTerritoryLayer("provinces-leaflet", 103, "province");
 
 export function drawProvinces(): void {
   TIME && console.time("drawProvinces");
   const { cells, provinces } = pack;
-
-  const isolines = getIsolines(pack, cellId => cells.province[cellId], { fill: true, waterGap: true });
-  const bodyPaths = buildFillPaths("province", isolines, index => provinces[index].color!);
-  ensureEl("provs").innerHTML = /* html */ `<g id="provincesBody">${bodyPaths}</g>`;
-
+  layer.update(
+    cellId => cells.province[cellId],
+    index => provinces[index].color!
+  );
   TIME && console.timeEnd("drawProvinces");
+}
+
+export function eraseProvinces(): void {
+  layer.clear();
+}
+
+export function ensureProvincesPane(): void {
+  layer.ensurePane();
+}
+
+/** World-space bounds of one province's rendered territory — see TerritoryLayerHandle.getFeatureBounds */
+export function getProvinceBounds(provinceId: number): DOMRect | undefined {
+  return layer.getFeatureBounds(provinceId);
+}
+
+/** World-space SVG path `d` for one province's rendered territory — see TerritoryLayerHandle.getFeaturePath */
+export function getProvincePath(provinceId: number): string | undefined {
+  return layer.getFeaturePath(provinceId);
 }

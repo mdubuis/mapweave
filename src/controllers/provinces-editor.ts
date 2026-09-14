@@ -21,9 +21,10 @@ import { Emblems } from "@/generators/emblems-generator";
 import { Notes } from "@/generators/notes";
 import type { Province } from "@/generators/provinces-generator";
 import { redrawEmblem, redrawEmblems, removeEmblem } from "@/renderers/draw-emblems";
+import { getProvinceBounds, getProvincePath } from "@/renderers/draw-provinces";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
 import { fog, unfog } from "@/renderers/overlays/fogging";
-import { highlightElement, highlightOutline } from "@/renderers/overlays/highlight";
+import { highlightArea, highlightOutline } from "@/renderers/overlays/highlight";
 import { applyOption, downloadFile, getArea, getAreaUnit, getFileName, speak } from "@/utils";
 import { ensureEl, findEl, getPointer, getRandomColor, isLand, P, rand, rn, si, unique } from "../utils";
 
@@ -224,9 +225,10 @@ function renderDialog(): void {
     else if (cl.contains("icon-flag-empty")) triggerIndependencePromps(p);
     else if (cl.contains("icon-dot-circled")) void Controllers.BurgsOverview.open({ stateId });
     else if (cl.contains("culturePopulation")) changePopulation(p);
-    else if (cl.contains("icon-target"))
-      highlightElement(select<SVGGElement, unknown>("#provs").select(`#province${p}`).node() as Element, 8);
-    else if (cl.contains("icon-pin")) toggleFog(p, cl);
+    else if (cl.contains("icon-target")) {
+      const box = getProvinceBounds(p);
+      if (box) highlightArea(box, 8);
+    } else if (cl.contains("icon-pin")) toggleFog(p, cl);
     else if (cl.contains("icon-book")) void Controllers.NotesEditor.open({ type: "province", id: p });
     else if (cl.contains("icon-trash-empty")) removeProvince(p);
     else if (cl.contains("icon-lock") || cl.contains("icon-lock-open")) updateLockStatus(p, cl);
@@ -387,12 +389,7 @@ function provinceHighlightOn(event: Event): void {
   if (!Layers.isOn("provinces")) return;
   if (customization) return;
   const animate = transition().duration(2000).ease(easeSinIn);
-  select<SVGGElement, unknown>("#provs")
-    .select(`#province${province}`)
-    .raise()
-    .transition(animate)
-    .attr("stroke-width", 2.5)
-    .attr("stroke", "#d0240f");
+  select(`#province${province}`).raise().transition(animate).attr("stroke-width", 2.5).attr("stroke", "#d0240f");
 }
 
 function provinceHighlightOff(event: Event): void {
@@ -406,11 +403,7 @@ function provinceHighlightOff(event: Event): void {
     select("#debug").selectAll(".highlight").remove();
     return;
   }
-  select<SVGGElement, unknown>("#provs")
-    .select(`#province${province}`)
-    .transition()
-    .attr("stroke-width", null)
-    .attr("stroke", null);
+  select(`#province${province}`).transition().attr("stroke-width", null).attr("stroke", null);
   select("#debug").selectAll(".highlight").remove();
 }
 
@@ -640,10 +633,11 @@ function changePopulation(province: number): void {
 }
 
 function toggleFog(p: number, cl: DOMTokenList): void {
-  const path = select<SVGGElement, unknown>("#provs").select(`#province${p}`).attr("d");
   const id = `focusProvince${p}`;
-  if (cl.contains("inactive")) fog(id, path);
-  else unfog(id);
+  if (cl.contains("inactive")) {
+    const path = getProvincePath(p);
+    if (path) fog(id, path);
+  } else unfog(id);
   cl.toggle("inactive");
 }
 
@@ -666,9 +660,10 @@ function removeProvince(p: number): void {
         removeEmblem("province", p);
         pack.provinces[p] = { i: p, removed: true } as Province;
 
-        const g = select<SVGGElement, unknown>("#provs").select("#provincesBody");
-        g.select(`#province${p}`).remove();
-        g.select(`#province-gap${p}`).remove();
+        // a Leaflet-backed layer: removing one feature's DOM node directly would desync Leaflet's
+        // own bookkeeping, unlike the old plain-SVG version — a full redraw is the safe way to
+        // reflect this
+        Layers.draw("provinces");
         Layers.draw("borders");
         Layers.draw("labels");
         refreshProvincesEditor();
@@ -1262,7 +1257,6 @@ function removeAllProvinces(): void {
 
         unfog();
         Layers.draw("borders");
-        select<SVGGElement, unknown>("#provs").select("#provincesBody").remove();
         Layers.hide("provinces");
         Layers.draw("labels");
 
@@ -1411,7 +1405,7 @@ function highlightProvinceOnMergeHover(event: Event): void {
   if (!Layers.isOn("provinces")) return;
   const province = +(event.currentTarget as HTMLElement).dataset.id!;
   if (!province) return;
-  const d = select<SVGGElement, unknown>("#provs").select(`#province${province}`).attr("d");
+  const d = getProvincePath(province);
   if (!d) return;
 
   provinceHighlightOff(event);

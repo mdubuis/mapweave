@@ -22,7 +22,7 @@ import { drawMilitary } from "@/renderers/draw-military";
 import { drawOcean, removeOcean } from "@/renderers/draw-ocean";
 import { drawPopulation } from "@/renderers/draw-population";
 import { drawPrecipitation, removePrecipitation } from "@/renderers/draw-precipitation";
-import { drawProvinces } from "@/renderers/draw-provinces";
+import { drawProvinces, ensureProvincesPane, eraseProvinces } from "@/renderers/draw-provinces";
 import { drawRelief, removeRelief } from "@/renderers/draw-relief-icons";
 import { drawReligions, ensureReligionsPane, eraseReligions } from "@/renderers/draw-religions";
 import { drawRivers } from "@/renderers/draw-rivers";
@@ -349,7 +349,14 @@ const mapLayers = [
     children: ["statesBody", "statesHalo"].map(id => ({ id, tag: "g" })),
     draw: drawStates
   }),
-  new Layer({ id: "provinces", element: "provs", parent: "viewbox", draw: drawProvinces }),
+  new Layer({
+    id: "provinces",
+    element: "provinces-leaflet",
+    parent: "leaflet",
+    draw: drawProvinces,
+    erase: eraseProvinces,
+    ensurePane: ensureProvincesPane
+  }),
   new Layer({ id: "zones", parent: "viewbox", draw: drawZones }),
   new Layer({
     id: "borders",
