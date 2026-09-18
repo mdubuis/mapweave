@@ -1,5 +1,6 @@
 // Default interaction on the map canvas: pan/zoom, click-to-edit and hover tooltips
 import { drag, select } from "d3";
+import { getLeafletMap } from "@/components/leaflet-map";
 import { Controllers } from "@/controllers";
 import type { LabelType } from "@/generators/labels-generator";
 import { dragLegendBox } from "@/renderers/draw-legend";
@@ -9,14 +10,26 @@ import { applyZoomBehavior } from "./zoom";
 
 const onMouseMove = debounce(handleMouseMove, 100);
 
+/**
+ * The click listener lives on the Leaflet map container rather than `#viewbox`: it's the one
+ * shared ancestor of both the legacy `<svg id="map">` tree (hosted in its own `legacySvg` pane,
+ * see leaflet-map.ts) and the panes the Leaflet-converted layers render into. A click on a
+ * converted-layer feature never bubbles through `#viewbox` at all — different subtree entirely —
+ * so binding there would silently miss it. map-placement.ts's click-to-place tools bind to this
+ * same node for the same reason, replacing this listener while a tool is active (see there).
+ */
+export function clickSurface() {
+  return select(getLeafletMap().getContainer());
+}
+
 export function applyDefaultViewboxEvents(): void {
   applyZoomBehavior();
 
   select<SVGGElement, unknown>("#viewbox")
     .style("cursor", "default")
     .on(".drag", null)
-    .on("click", onClick)
     .on("touchmove mousemove", onMouseMove);
+  clickSurface().on("click", onClick);
 
   select<SVGGElement, unknown>("#legend").call(drag<SVGGElement, unknown>().on("start", dragLegendBox));
 }
@@ -53,9 +66,44 @@ const GREAT_EDITORS: Record<string, Opener> = {
   armies: (_target, parent) => Controllers.RegimentEditor.open(`#${parent.id}`)
 };
 
+// Leaflet-converted layer -> resolve its click directly by the pane it rendered into, rather than
+// by a fixed DOM ancestor depth (meaningless for Leaflet's own pane/divIcon structure). Panes not
+// listed here (the five territory fills: biomes/religions/cultures/provinces/states) have nothing
+// wired to their clicks either, same as before this layer's conversion.
+const PANE_EDITORS: Record<string, (target: Element) => void> = {
+  "rivers-leaflet": target => {
+    const path = target.closest<SVGPathElement>("path[id]");
+    if (path) Controllers.RiverEditor.open(path.id);
+  },
+  "routes-leaflet": target => {
+    const path = target.closest<SVGPathElement>("path[id]");
+    if (path) Controllers.RouteEditor.open(path.id);
+  },
+  "markers-leaflet": target => {
+    const svg = target.closest<SVGSVGElement>("svg[id^='marker']");
+    if (svg) Controllers.MarkersEditor.open(Number(svg.id.slice(6)));
+  },
+  "burg-icons-leaflet": target => {
+    const svg = target.closest<SVGSVGElement>("svg[data-id]");
+    if (svg) Controllers.BurgEditor.open(Number(svg.dataset.id));
+  }
+};
+
 /** Handle a click on the map: open the editor for the clicked element */
 function onClick(event: MouseEvent): void {
-  const target = event?.target as SVGElement | null;
+  const target = event?.target as Element | null;
+  if (!target) return;
+
+  const pane = target.closest<HTMLElement>(".leaflet-pane");
+  if (pane && pane.id !== "legacyPane") {
+    PANE_EDITORS[pane.id]?.(target);
+    return;
+  }
+
+  onLegacyClick(target as SVGElement);
+}
+
+function onLegacyClick(target: SVGElement): void {
   const parent = target?.parentElement as SVGElement | null;
   const grand = parent?.parentElement as SVGElement | null;
   const great = grand?.parentElement as SVGElement | null;

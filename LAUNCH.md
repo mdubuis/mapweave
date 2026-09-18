@@ -188,22 +188,17 @@ look for beyond those layers — the useful check is that nothing *regressed*:
   like the other five layers). Open **Rivers Overview** and try: hover a row (the river should
   highlight red on the map), "locate" a row (zoom/pan to it), and **Basin Highlight** (every river
   should get a distinct color by drainage basin, then revert cleanly when toggled off). Open the
-  River editor on one (via the pencil icon in Rivers Overview, not by clicking the map — see below)
-  and drag a control point: the river's shape should update live, smoothly, without the other
-  rivers flickering or re-rendering. **Specifically worth checking, uncertain outcome**: does
-  clicking a river directly *on the map* open its editor, and does hovering a river on the map
-  highlight its row in Rivers Overview? Both depend on a real risk found during this conversion
-  (unlike the five previous layers, rivers were never click-through by design) — a "no" here isn't
-  a regression from this session's work, it's the click-delegation gap already tracked in
-  `MIGRATION.md` as still-pending, now confirmed to matter for rivers specifically.
+  River editor on one (via the pencil icon in Rivers Overview, or now also by **clicking the river
+  directly on the map** — see the dedicated click-delegation check near the end of this section) and
+  drag a control point: the river's shape should update live, smoothly, without the other rivers
+  flickering or re-rendering.
 - **Routes**: roads/trails/sea routes should each keep their own distinct color/width/dash style
   (not all one color like rivers). Open the **Route editor** on one (via Routes Overview) and drag a
   control point — same "updates live, other routes untouched" check as rivers, plus **specifically**:
   change the route's group in the editor (the dropdown) while still editing it — the route should
   recolor to match the new group *and remain editable* (draggable, clickable to add points) without
   needing to reopen the editor. Try **Route Groups editor**: add a custom group, assign a route to
-  it, remove a group — the group list and route colors should stay in sync. Same map-click/hover
-  uncertainty as rivers applies here too (see above).
+  it, remove a group — the group list and route colors should stay in sync.
 - **Markers**: markers should render with the same pin shapes/icons/colors as before. Open a marker
   (via **Markers Overview**'s pencil icon, not by clicking the map — see below) and **drag it** on
   the map: it should move smoothly (this is now real native Leaflet dragging, not the old
@@ -215,9 +210,7 @@ look for beyond those layers — the useful check is that nothing *regressed*:
   the map), pin/unpin, lock/unlock, "locate" (zoom + flash outline), and remove one/remove all
   unlocked. Try **Markers in Radius** (the dot-circle icon in the marker editor): the radius circle
   and the in-range list should stay in sync as you change the radius, and removing a marker from the
-  list should update both the list and the map. Same map-click/hover uncertainty as rivers/routes
-  applies here too (see above) — clicking a marker pin directly on the map to open its editor is not
-  guaranteed to work yet.
+  list should update both the list and the map.
 - **Burg icons**: switch through a few layer presets (Political/Cultural/POI/...) and confirm town,
   capital, and other burg-group icons render with the right shape/color, and port burgs show a small
   anchor glyph at the same spot. Open **Burgs Overview** and check hover-highlight (table row ↔ map),
@@ -228,18 +221,29 @@ look for beyond those layers — the useful check is that nothing *regressed*:
   rewritten burg-icon geometry lookup (see `MIGRATION.md`), which isn't covered by any automated
   test and affects label placement for *every* label type, not just burg names, if it's subtly wrong.
   Also try **Tools → Create a submap** with "Rescale burg styles" checked — this exercises a real
-  crash that was found and fixed during this conversion. Same map-click/hover uncertainty as the
-  other layers above applies to clicking a burg icon directly (Burgs Overview access is unaffected).
+  crash that was found and fixed during this conversion.
+- **Click delegation, the highest-priority check in this whole section**: click a river, a route, a
+  marker, and a burg icon **directly on the map** (not through an Overview dialog) — each should now
+  open its editor. This was explicitly broken after every one of the four conversions above (clicks
+  on a converted layer's rendered shape never reached it, and separately, a full-map background
+  rectangle silently absorbed most clicks anyway) and is now fixed — see `MIGRATION.md`'s Phase 5
+  section for the two-part explanation. Also confirm the layers that were *always* click-through
+  still work the same as before: a lake, an ice cap, a coastline point, a state/province border.
+  And confirm the "click to place" tools still land in the right spot: **Add Marker**, **Add Burg**,
+  **Add Label**, and the river auto-creator — try clicking on empty land, not just clicking near an
+  existing icon (clicking exactly on top of an existing burg/marker/river/route icon while placing a
+  new one is a known, accepted gap — nothing should place there, but it also shouldn't error).
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
-`src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
-`src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`,
-`src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`, `src/renderers/draw-markers.ts`,
-`src/renderers/draw-burg-icons.ts`, `src/controllers/label-spread.ts`) and what's still unconverted.
-**Also worth knowing**: image export (SVG/PNG/JPEG/tiles, via the Export menu) currently omits all 9
-converted layers entirely — a real, newly-discovered gap, not something to re-report as a surprise;
-see `MIGRATION.md`'s Phase 5 section for details.
+`src/components/viewbox-events.ts`, `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`,
+`src/renderers/draw-religions.ts`, `src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`,
+`src/renderers/draw-states.ts`, `src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`,
+`src/renderers/draw-markers.ts`, `src/renderers/draw-burg-icons.ts`, `src/controllers/label-spread.ts`)
+and what's still unconverted (the minimap — see `MIGRATION.md`). **Also worth knowing**: image export
+(SVG/PNG/JPEG/tiles, via the Export menu) currently omits all 9 converted layers entirely — a real,
+newly-discovered gap, not something to re-report as a surprise; see `MIGRATION.md`'s Phase 5 section
+for details.
 
 ## 6. Verify nothing's broken after a change
 

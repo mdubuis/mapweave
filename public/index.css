@@ -219,7 +219,8 @@ t,
 #landmass,
 #vignette,
 #gridOverlay,
-#fogging {
+#fogging,
+#oceanBase {
   pointer-events: none;
 }
 
