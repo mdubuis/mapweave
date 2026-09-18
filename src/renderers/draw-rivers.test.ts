@@ -63,6 +63,7 @@ test("draws every river and tags each rendered path with its id", () => {
 test("redrawing one river leaves the others untouched", () => {
   drawRivers();
   const other = document.getElementById("river1");
+  const edited = document.getElementById("river2");
 
   pack.rivers[1].cells = [1, 2];
   pack.rivers[1].points = [
@@ -72,7 +73,9 @@ test("redrawing one river leaves the others untouched", () => {
   redrawRiver(pack.rivers[1]);
 
   expect(document.getElementById("river1")).toBe(other); // untouched, same node
-  expect(document.getElementById("river2")).not.toBeNull();
+  // same node for the edited river too, not just present: river-editor.ts binds a click handler
+  // directly to the rendered element while dragging a control point, so it must survive in place
+  expect(document.getElementById("river2")).toBe(edited);
 });
 
 test("a full redraw drops rivers that no longer exist", () => {

@@ -109,12 +109,21 @@ export function update(rivers: River[]): void {
   geoJsonLayer.eachLayer(tagAndFixup);
 }
 
-/** Incremental: rebuild just one river, keeping every other river's layer untouched */
+/** Incremental: rebuild just one river, keeping every other river's layer untouched. When the
+ *  river already has a rendered shape, its geometry is updated in place (setLatLngs) rather than
+ *  removed and re-added — river-editor.ts binds a click handler directly to the rendered element
+ *  while dragging a control point, and that binding would silently go stale on a fresh element */
 export function updateOne(river: River): void {
   if (!geoJsonLayer) return;
   const feature = buildFeature(river);
-
   const existing = findLayer(river.i);
+
+  if (existing && feature) {
+    const ring = feature.geometry.coordinates[0] as unknown as [number, number][];
+    (existing as unknown as L.Polygon).setLatLngs(ring.map(([x, y]) => [y, x]));
+    return;
+  }
+
   if (existing) geoJsonLayer.removeLayer(existing);
   if (!feature) return;
 

@@ -30,13 +30,12 @@ function open(defaultGroup?: string): void {
   creatorPoints = [];
   renderDialog();
 
-  // update route groups
-  ensureEl("routeCreatorGroupSelect").innerHTML = select("#routes")
-    .selectAll<SVGGElement, unknown>("g")
-    .nodes()
-    .map(el => {
+  // update route groups — styles.routes.groups is the authoritative group list (no per-group SVG
+  // <g> to iterate anymore, see MIGRATION.md Phase 5)
+  ensureEl("routeCreatorGroupSelect").innerHTML = Object.keys(styles.routes.groups)
+    .map(group => {
       const selected = defaultGroup || "roads";
-      return `<option value="${el.id}" ${el.id === selected ? "selected" : ""}>${el.id}</option>`;
+      return `<option value="${group}" ${group === selected ? "selected" : ""}>${group}</option>`;
     })
     .join("");
 

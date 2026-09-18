@@ -115,11 +115,10 @@ function updateRouteData(route: Route): void {
 
   const routeGroup = ensureEl<HTMLSelectElement>("routeGroup");
   routeGroup.options.length = 0;
-  select("#routes")
-    .selectAll<HTMLElement, unknown>("g")
-    .each(function () {
-      routeGroup.options.add(new Option(this.id, this.id, false, this.id === route.group));
-    });
+  // styles.routes.groups is the authoritative group list now — no per-group SVG <g> to iterate
+  for (const group of Object.keys(styles.routes.groups)) {
+    routeGroup.options.add(new Option(group, group, false, group === route.group));
+  }
 
   updateRouteLength(route);
 
@@ -401,8 +400,7 @@ function changeName(this: HTMLInputElement): void {
 function changeGroup(this: HTMLInputElement): void {
   const route = getRoute();
   route.group = this.value;
-  redrawRouteShape(route); // the path is re-created under the new group, so re-bind the editor to it
-  selectedRoute = select<SVGElement, unknown>(`#route${route.i}`).on("click", addControlPoint);
+  redrawRouteShape(route); // updates the same element's geometry and style in place, see draw-routes.ts
 }
 
 function generateName(): void {

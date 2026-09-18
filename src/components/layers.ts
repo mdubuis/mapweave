@@ -26,7 +26,7 @@ import { drawProvinces, ensureProvincesPane, eraseProvinces } from "@/renderers/
 import { drawRelief, removeRelief } from "@/renderers/draw-relief-icons";
 import { drawReligions, ensureReligionsPane, eraseReligions } from "@/renderers/draw-religions";
 import { drawRivers, ensureRiversPane, eraseRivers } from "@/renderers/draw-rivers";
-import { drawRoutes, removeRoutes } from "@/renderers/draw-routes";
+import { drawRoutes, ensureRoutesPane, removeRoutes } from "@/renderers/draw-routes";
 import { drawScaleBar, removeScaleBar } from "@/renderers/draw-scalebar";
 import { drawStates, eraseStates } from "@/renderers/draw-states";
 import { drawTemperature } from "@/renderers/draw-temperature";
@@ -379,10 +379,11 @@ const mapLayers = [
   }),
   new Layer({
     id: "routes",
-    parent: "viewbox",
-    children: ["roads", "trails", "searoutes"].map(id => ({ id, tag: "g" })),
+    element: "routes-leaflet",
+    parent: "leaflet",
     draw: drawRoutes,
-    erase: removeRoutes
+    erase: removeRoutes,
+    ensurePane: ensureRoutesPane
   }),
   new Layer({ id: "temperature", parent: "viewbox", draw: drawTemperature }),
   new Layer({

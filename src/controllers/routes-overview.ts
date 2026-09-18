@@ -195,20 +195,12 @@ function renderRoutesPage(view: TableView<Route>): void {
 function routeHighlightOn(event: Event): void {
   Layers.show("routes");
   const routeId = +(event.target as HTMLElement).dataset.id!;
-  select("#routes")
-    .select(`#route${routeId}`)
-    .attr("stroke", "red")
-    .attr("stroke-width", 2)
-    .attr("stroke-dasharray", "none");
+  select(`#route${routeId}`).attr("stroke", "red").attr("stroke-width", 2).attr("stroke-dasharray", "none");
 }
 
 function routeHighlightOff(e: Event): void {
   const routeId = +(e.target as HTMLElement).dataset.id!;
-  select("#routes")
-    .select(`#route${routeId}`)
-    .attr("stroke", null)
-    .attr("stroke-width", null)
-    .attr("stroke-dasharray", null);
+  select(`#route${routeId}`).attr("stroke", null).attr("stroke-width", null).attr("stroke-dasharray", null);
 }
 
 function zoomToRoute(this: HTMLElement): void {

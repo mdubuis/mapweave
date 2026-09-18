@@ -1,13 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test, vi } from "vitest";
-import { setViewportSize, setViewportTransform } from "@/components/viewport";
 import type { Route } from "@/generators/routes-generator";
-import { ViewportLayers } from "@/renderers/viewport/viewport-renderer";
 
-const mocks = vi.hoisted(() => ({ layerOn: true }));
-vi.mock("@/components/layers", () => ({ Layers: { isOn: () => mocks.layerOn } }));
+vi.mock("@/components/layers", () => ({ Layers: {} }));
 
-import "@/generators/styles";
 import { drawRoutes, getRouteBox, redrawRoute, removeRoutes, setEditedRoute, setTempRoute } from "./draw-routes";
 
 function route(i: number, x: number, group = "roads"): Route {
@@ -19,61 +15,35 @@ function route(i: number, x: number, group = "roads"): Route {
       [x, 10, 1],
       [x + 40, 50, 2]
     ]
-  };
+  } as unknown as Route;
 }
 
-const getPath = vi.fn(({ points }: { points: number[][] }) => `M${points.map(([x, y]) => `${x},${y}`).join("L")}`);
-
 beforeEach(() => {
-  mocks.layerOn = true;
-  document.body.innerHTML = /* html */ `<svg id="map">
-      <g id="routes"><g id="roads"></g><g id="trails"></g><g id="searoutes"></g></g>
-    </svg>`;
   globalThis.pack = { routes: [route(1, 0), route(2, 500), route(3, 0, "trails")] } as never;
-  globalThis.Routes = { getPath } as never;
-  getPath.mockClear();
-  setViewportSize(100, 100);
-  setViewportTransform(1, 0, 0);
+  globalThis.styles = {
+    routes: {
+      groups: {
+        roads: { attrs: { opacity: 1, stroke: "#000000", "stroke-width": 0.5 } },
+        trails: { attrs: { opacity: 1, stroke: "#666666", "stroke-width": 0.3, "stroke-dasharray": "1 1" } },
+        searoutes: { attrs: { opacity: 0.8, stroke: "#4682b4", "stroke-width": 0.3, "stroke-dasharray": "0.8 0.8" } }
+      }
+    }
+  } as never;
   setEditedRoute(null);
   setTempRoute(null);
 });
 
-test("routes are materialized into their own group and culled on panning", () => {
+test("draws every route, tagged with its id, styled per its group", () => {
   drawRoutes();
-  expect(document.querySelector("#roads > #route1")).not.toBeNull();
-  expect(document.querySelector("#trails > #route3")).not.toBeNull();
-  expect(document.getElementById("route2")).toBeNull();
-  expect(document.getElementById("routes")!.getAttribute("fill")).toBe("none");
-  expect(document.getElementById("roads")!.dataset.group).toBe("roads");
+  expect(document.getElementById("route1")).not.toBeNull();
+  expect(document.getElementById("route2")).not.toBeNull();
+  expect(document.getElementById("route3")).not.toBeNull();
 
-  const first = document.getElementById("route1");
-  ViewportLayers.renderNow();
-  expect(document.getElementById("route1")).toBe(first);
-  expect(getPath).toHaveBeenCalledTimes(3); // paths are built once, not per frame
-
-  setViewportTransform(1, -500, 0);
-  ViewportLayers.renderNow();
-  expect(document.getElementById("route1")).toBeNull();
-  expect(document.querySelector("#roads > #route2")?.getAttribute("d")).toBe("M500,10L540,50");
-  expect(getPath).toHaveBeenCalledTimes(3);
+  expect(document.getElementById("route1")?.getAttribute("stroke")).toBe("#000000");
+  expect(document.getElementById("route3")?.getAttribute("stroke")).toBe("#666666"); // route 3 is a trail
 });
 
-test("the edited route stays rendered off-screen and follows a group change", () => {
-  drawRoutes();
-  setEditedRoute(2);
-  expect(document.querySelector("#roads > #route2")).not.toBeNull();
-
-  pack.routes[1].group = "searoutes";
-  redrawRoute(pack.routes[1]);
-  expect(document.querySelector("#roads > #route2")).toBeNull();
-  expect(document.querySelector("#searoutes > #route2")).not.toBeNull();
-
-  setEditedRoute(null);
-  ViewportLayers.renderNow();
-  expect(document.getElementById("route2")).toBeNull();
-});
-
-test("editing a visible route updates its path in place", () => {
+test("editing a visible route updates its geometry in place", () => {
   drawRoutes();
   const edited = document.getElementById("route1");
   pack.routes[0].points = [
@@ -81,11 +51,23 @@ test("editing a visible route updates its path in place", () => {
     [30, 30, 2]
   ];
   redrawRoute(pack.routes[0]);
-  expect(document.getElementById("route1")).toBe(edited);
-  expect(edited?.getAttribute("d")).toBe("M0,10L30,30");
+  expect(document.getElementById("route1")).toBe(edited); // same node, not replaced
 });
 
-test("the creator's temporary route renders in the selected group and never in an export", () => {
+test("changing a route's group restyles it in place, same node", () => {
+  drawRoutes();
+  const edited = document.getElementById("route2");
+  expect(edited?.getAttribute("stroke")).toBe("#000000"); // starts as a road
+
+  pack.routes[1].group = "searoutes";
+  redrawRoute(pack.routes[1]);
+
+  expect(document.getElementById("route2")).toBe(edited); // same node — route-editor.ts's click
+  // handler (bound directly to the rendered element while editing) must survive this
+  expect(edited?.getAttribute("stroke")).toBe("#4682b4");
+});
+
+test("the creator's temporary route renders and clears without touching real routes", () => {
   drawRoutes();
   setTempRoute({
     group: "trails",
@@ -94,49 +76,40 @@ test("the creator's temporary route renders in the selected group and never in a
       [10, 10, 2]
     ]
   });
-  expect(document.querySelector("#trails > #routeTemp")?.getAttribute("d")).toBe("M0,0L10,10");
-
-  const clone = document.getElementById("map")!.cloneNode(true) as SVGSVGElement;
-  ViewportLayers.renderTo(clone);
-  expect(clone.querySelector("#routeTemp")).toBeNull();
-  expect(clone.querySelectorAll("#routes path")).toHaveLength(3);
+  const temp = document.getElementById("route-1");
+  expect(temp).not.toBeNull();
+  expect(temp?.getAttribute("stroke")).toBe("#666666"); // styled as a trail
 
   setTempRoute(null);
-  expect(document.getElementById("routeTemp")).toBeNull();
+  expect(document.getElementById("route-1")).toBeNull();
+  expect(document.getElementById("route1")).not.toBeNull(); // real routes untouched
 });
 
-test("redraw picks up new paths and removed routes", () => {
+test("a full redraw drops routes that no longer exist", () => {
   drawRoutes();
   pack.routes = [pack.routes[0]];
   drawRoutes();
-  expect(document.querySelectorAll("#routes path")).toHaveLength(1);
+  expect(document.getElementById("route1")).not.toBeNull();
+  expect(document.getElementById("route2")).toBeNull();
+  expect(document.getElementById("route3")).toBeNull();
   expect(getRouteBox(3)).toBeNull();
-
-  const box = getRouteBox(1)!;
-  expect(box.x).toBe(-0.7); // the course inflated by the group stroke width
-  expect(box.width).toBeCloseTo(41.4);
 });
 
-test("erasing the layer keeps the groups, which carry the user's styles", () => {
+test("erasing the layer removes every route", () => {
   drawRoutes();
   removeRoutes();
-  expect(document.querySelectorAll("#routes path")).toHaveLength(0);
-  expect(document.querySelectorAll("#routes > g")).toHaveLength(3);
+  expect(document.getElementById("route1")).toBeNull();
+  expect(document.getElementById("route2")).toBeNull();
 
-  ViewportLayers.renderNow();
-  expect(document.querySelectorAll("#routes path")).toHaveLength(0); // invalidated: nothing to reconcile against
   drawRoutes();
-  expect(document.querySelectorAll("#routes path")).toHaveLength(2);
+  expect(document.getElementById("route1")).not.toBeNull();
 });
 
-test("viewport rendering leaves a disabled layer empty", () => {
+test("a route bounding box is available in world-space coordinates", () => {
   drawRoutes();
-  mocks.layerOn = false;
-  document.getElementById("roads")!.replaceChildren(); // the layer registry erases the content when hidden
-  ViewportLayers.renderNow();
-  expect(document.getElementById("route1")).toBeNull();
-
-  mocks.layerOn = true;
-  ViewportLayers.renderNow();
-  expect(document.getElementById("route1")).not.toBeNull();
+  const box = getRouteBox(1)!;
+  expect(box.x).toBe(0);
+  expect(box.width).toBe(40);
+  expect(box.y).toBe(10);
+  expect(box.height).toBe(40);
 });

@@ -1,4 +1,3 @@
-import { select } from "d3";
 import { confirmationDialog, destroyDialog } from "@/components/dialog/dialog-helpers";
 import { Layers } from "@/components/layers";
 import { tip } from "@/components/tooltips";
@@ -55,19 +54,18 @@ function onBodyClick(ev: Event): void {
 function addLines(): void {
   ensureEl("routeGroupsEditorBody").innerHTML = "";
 
-  const lines = select("#routes")
-    .selectAll<SVGGElement, unknown>("g")
-    .nodes()
-    .map(el => {
-      const count = pack.routes.filter((route: Route) => route.group === el.id).length;
-      return /* html */ `<div data-id="${el.id}" class="states" style="display: flex; justify-content: space-between;">
-          <span>${el.id} (${count})</span>
+  // styles.routes.groups is the authoritative group list now — no per-group SVG <g> to iterate
+  // (see MIGRATION.md Phase 5: routes render as one Leaflet layer, styled per-feature by group)
+  const lines = Object.keys(styles.routes.groups).map(group => {
+    const count = pack.routes.filter((route: Route) => route.group === group).length;
+    return /* html */ `<div data-id="${group}" class="states" style="display: flex; justify-content: space-between;">
+          <span>${group} (${count})</span>
           <div style="width: auto; display: flex; gap: 0.4em;">
             <span data-tip="Edit style" class="editStyle icon-brush pointer" style="font-size: smaller;"></span>
             <span data-tip="Remove group" class="removeGroup icon-trash pointer"></span>
           </div>
         </div>`;
-    });
+  });
 
   ensureEl("routeGroupsEditorBody").innerHTML = lines.join("");
 }
@@ -81,11 +79,13 @@ function addGroup(): void {
 
     if (!group) return tip("Invalid group name", false, "error");
     if (!group.startsWith("route-")) group = `route-${group}`;
-    if (document.getElementById(group))
-      return tip("Element with this name already exists. Provide a unique name", false, "error");
+    if (styles.routes.groups[group])
+      return tip("A group with this name already exists. Provide a unique name", false, "error");
     if (Number.isFinite(+group.charAt(0))) return tip("Group name should start with a letter", false, "error");
 
-    // the store is authoritative: seed an entry so style edits and presets can address the group
+    // the store is authoritative: seed an entry so style edits and presets can address the group —
+    // no per-group SVG <g> to create anymore, the Leaflet layer styles each route by its own
+    // feature.properties.group at render time (see MIGRATION.md Phase 5)
     const template = styles.routes.groups.roads || Object.values(styles.routes.groups)[0];
     const groupStyle = structuredClone(template);
     Object.assign(groupStyle.attrs, {
@@ -96,10 +96,6 @@ function addGroup(): void {
     });
     styles.routes.groups[group] = groupStyle;
 
-    const groupEl = select("#routes").append("g").attr("id", group).attr("data-group", group);
-    for (const [attr, value] of Object.entries(groupStyle.attrs)) {
-      if (value !== null && value !== undefined) groupEl.attr(attr, value);
-    }
     ensureEl<HTMLSelectElement>("routeGroup").options.add(new Option(group, group));
     addLines();
 
@@ -115,7 +111,9 @@ function removeGroup(group: string): void {
     confirm: "Remove",
     onConfirm: () => {
       pack.routes.filter((r: Route) => r.group === group).forEach(Routes.remove);
-      if (!DEFAULT_GROUPS.includes(group)) select("#routes").select(`#${group}`).remove();
+      // styles.routes.groups is now the source addLines() lists from — drop the entry too, or a
+      // "removed" group with no routes left would keep showing up
+      if (!DEFAULT_GROUPS.includes(group)) delete styles.routes.groups[group];
       Layers.draw("routes", "labels");
       addLines();
     }
