@@ -139,11 +139,11 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and all five territory layers — **biomes**, **religions**, **cultures**,
-**provinces**, and **states** — are now actually rendered by Leaflet (`L.geoJSON()`) rather than
-hand-drawn SVG. Everything else (rivers, routes, burgs, markers, the minimap, the ruler) is still
-on the old code, unconverted. There's no visible UI difference to look for beyond those layers —
-the useful check is that nothing *regressed*:
+d3-zoom code, and six layers — the five territory layers (**biomes**, **religions**, **cultures**,
+**provinces**, **states**) plus **rivers** — are now actually rendered by Leaflet (`L.geoJSON()`)
+rather than hand-drawn SVG. Everything else (routes, burgs, markers, the minimap, the ruler) is
+still on the old code, unconverted. There's no visible UI difference to look for beyond those
+layers — the useful check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -184,12 +184,24 @@ the useful check is that nothing *regressed*:
   the **Diplomacy editor** and confirm every state recolors by its relationship to the selected one
   (ally/enemy/neutral colors) — this exercises a whole feature found late in this conversion, not
   just in the States editor itself.
+- **Rivers**: rivers should render and color exactly as before (a shared water color, not per-river
+  like the other five layers). Open **Rivers Overview** and try: hover a row (the river should
+  highlight red on the map), "locate" a row (zoom/pan to it), and **Basin Highlight** (every river
+  should get a distinct color by drainage basin, then revert cleanly when toggled off). Open the
+  River editor on one (via the pencil icon in Rivers Overview, not by clicking the map — see below)
+  and drag a control point: the river's shape should update live, smoothly, without the other
+  rivers flickering or re-rendering. **Specifically worth checking, uncertain outcome**: does
+  clicking a river directly *on the map* open its editor, and does hovering a river on the map
+  highlight its row in Rivers Overview? Both depend on a real risk found during this conversion
+  (unlike the five previous layers, rivers were never click-through by design) — a "no" here isn't
+  a regression from this session's work, it's the click-delegation gap already tracked in
+  `MIGRATION.md` as still-pending, now confirmed to matter for rivers specifically.
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
-`src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`)
-and what's still unconverted.
+`src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`,
+`src/renderers/draw-rivers.ts`) and what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
