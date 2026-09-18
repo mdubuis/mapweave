@@ -1,4 +1,6 @@
 import Alea from "alea";
+import * as L from "leaflet";
+import { getLeafletMap } from "@/components/leaflet-map";
 import { viewport } from "@/components/viewport";
 import type { LabelType } from "@/generators/labels-generator";
 import { getGroupStyle, writeGroupStyle } from "@/renderers/labels/label-groups";
@@ -350,22 +352,22 @@ function getPatches(labels: LabelData[], selected: Map<string, LabelPlacementCan
 }
 
 function getDisplayedBurgIconBounds(): Map<number, LabelBounds> {
-  const mapRect = document.querySelector<SVGSVGElement>("#map")?.getBoundingClientRect();
-  const viewbox = document.querySelector<SVGGraphicsElement>("#viewbox");
-  const screenMatrix = viewbox?.getScreenCTM();
-  if (!mapRect || !screenMatrix) return new Map();
+  const map = getLeafletMap();
+  const containerRect = map.getContainer().getBoundingClientRect();
 
-  const inverse = screenMatrix.inverse();
   const boundsByBurg = new Map<number, LabelBounds>();
-  const icons = document.querySelectorAll<SVGGraphicsElement>("#burgIcons use[data-id], #anchors use[data-id]");
+  // burg icons render as <svg id="burg{i}"|"anchor{i}" data-id="{i}"> inside a Leaflet divIcon (see
+  // burg-icon-layer.ts) — walk the whole document rather than a container id, since each icon is its
+  // own top-level element under a Leaflet pane, not a child of one shared #burgIcons/#anchors group
+  const icons = document.querySelectorAll<SVGGraphicsElement>("svg[id^='burg'][data-id], svg[id^='anchor'][data-id]");
   for (const icon of icons) {
     const id = Number(icon.dataset.id);
     const rect = icon.getBoundingClientRect();
-    if (!Number.isInteger(id) || !intersectsScreenRect(rect, mapRect)) continue;
+    if (!Number.isInteger(id) || !intersectsScreenRect(rect, containerRect)) continue;
 
     const burg = pack.burgs[id];
     if (burg?.i !== id || burg.removed) continue;
-    const bounds = screenRectToMapBounds(rect, inverse);
+    const bounds = screenRectToMapBounds(rect, map, containerRect);
     if (!isDrawnOn(bounds, burg.x, burg.y)) continue;
 
     const existing = boundsByBurg.get(id);
@@ -406,10 +408,12 @@ function intersectsScreenRect(rect: DOMRect, mapRect: DOMRect): boolean {
   );
 }
 
-function screenRectToMapBounds(rect: DOMRect, inverse: DOMMatrix): LabelBounds {
-  const topLeft = new DOMPoint(rect.left, rect.top).matrixTransform(inverse);
-  const bottomRight = new DOMPoint(rect.right, rect.bottom).matrixTransform(inverse);
-  return { x1: topLeft.x, y1: topLeft.y, x2: bottomRight.x, y2: bottomRight.y };
+function screenRectToMapBounds(rect: DOMRect, map: L.Map, containerRect: DOMRect): LabelBounds {
+  const topLeft = map.containerPointToLatLng(L.point(rect.left - containerRect.left, rect.top - containerRect.top));
+  const bottomRight = map.containerPointToLatLng(
+    L.point(rect.right - containerRect.left, rect.bottom - containerRect.top)
+  );
+  return { x1: topLeft.lng, y1: topLeft.lat, x2: bottomRight.lng, y2: bottomRight.lat };
 }
 
 function unionBounds(first: LabelBounds, second: LabelBounds): LabelBounds {

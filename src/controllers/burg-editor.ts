@@ -31,7 +31,6 @@ function open(id: number | string): void {
 
   selectedId = +id;
   selected = select<any, unknown>("#labels").select(`[data-label-type='burg'][data-id='${id}']`);
-  if (!selected.size()) selected = select<any, unknown>("#burgIcons").select(`[data-id='${id}']`);
 
   renderDialog();
   updateGroupsList();

@@ -205,7 +205,9 @@ function renderDialog(): void {
   applyLineHighlighting(dialogId, ({ target, cellId }) => {
     const burgId = pack.cells.burg[cellId];
     if (burgId) return burgId;
-    const burg = target.closest<SVGElement>("#labels [data-label-type='burg'][data-id], #burgIcons [data-id]");
+    const burg = target.closest<SVGElement>(
+      "#labels [data-label-type='burg'][data-id], svg[id^='burg'][data-id], svg[id^='anchor'][data-id]"
+    );
     return burg ? Number(burg.dataset.id) : undefined;
   });
 

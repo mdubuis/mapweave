@@ -1,7 +1,7 @@
 // Global layers registry: owns layers list, order, and svg skeleton
 import { drawBiomes, ensureBiomesPane, eraseBiomes } from "@/renderers/draw-biomes";
 import { drawBorders } from "@/renderers/draw-borders";
-import { drawBurgIcons } from "@/renderers/draw-burg-icons";
+import { drawBurgIcons, ensureBurgIconsPane, eraseBurgIcons } from "@/renderers/draw-burg-icons";
 import { drawCells } from "@/renderers/draw-cells";
 import { drawCoastline } from "@/renderers/draw-coastline";
 import { drawCoordinates } from "@/renderers/draw-coordinates";
@@ -432,10 +432,11 @@ const mapLayers = [
   }),
   new Layer({
     id: "burgIcons",
-    element: "icons",
-    parent: "viewbox",
-    children: ["burgIcons", "anchors"].map(id => ({ id, tag: "g" })),
-    draw: drawBurgIcons
+    element: "burg-icons-leaflet",
+    parent: "leaflet",
+    draw: drawBurgIcons,
+    erase: eraseBurgIcons,
+    ensurePane: ensureBurgIconsPane
   }),
   new Layer({
     id: "labels",

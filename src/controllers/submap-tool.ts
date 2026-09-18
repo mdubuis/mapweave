@@ -125,10 +125,10 @@ function recalculateMapSize(x0: number, y0: number, scale: number): void {
 
 function rescaleBurgStyles(scale: number): void {
   window.Burgs.ensureBurgGroupStyles(); // a group without a store entry would silently skip the rescale
-  for (const group of ensureEl("burgIcons").querySelectorAll<SVGGElement>(":scope > g")) {
-    const iconStyle = styles.burgIcons.burgIcons.groups[group.id];
+  const burgGroups = new Set(pack.burgs.filter(burg => burg.i && !burg.removed && burg.group).map(burg => burg.group!));
+  for (const groupName of burgGroups) {
+    const iconStyle = styles.burgIcons.burgIcons.groups[groupName];
     if (iconStyle) iconStyle.options.size = rn(minmax(iconStyle.options.size * scale, 0.2, 10), 2);
-    group.remove();
   }
 
   const burgLabelGroups = new Set(

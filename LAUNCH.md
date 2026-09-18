@@ -139,11 +139,11 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and eight layers — the five territory layers (**biomes**, **religions**, **cultures**,
-**provinces**, **states**) plus **rivers**, **routes**, and **markers** — are now actually rendered
-by Leaflet (`L.geoJSON()`/`L.marker`) rather than hand-drawn SVG. Everything else (burgs, the
-minimap, the ruler) is still on the old code, unconverted. There's no visible UI difference to look
-for beyond those layers — the useful check is that nothing *regressed*:
+d3-zoom code, and nine layers — the five territory layers (**biomes**, **religions**, **cultures**,
+**provinces**, **states**) plus **rivers**, **routes**, **markers**, and **burg icons** — are now
+actually rendered by Leaflet (`L.geoJSON()`/`L.marker`) rather than hand-drawn SVG. Everything else
+(the minimap, the ruler) is still on the old code, unconverted. There's no visible UI difference to
+look for beyond those layers — the useful check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -218,15 +218,28 @@ for beyond those layers — the useful check is that nothing *regressed*:
   list should update both the list and the map. Same map-click/hover uncertainty as rivers/routes
   applies here too (see above) — clicking a marker pin directly on the map to open its editor is not
   guaranteed to work yet.
+- **Burg icons**: switch through a few layer presets (Political/Cultural/POI/...) and confirm town,
+  capital, and other burg-group icons render with the right shape/color, and port burgs show a small
+  anchor glyph at the same spot. Open **Burgs Overview** and check hover-highlight (table row ↔ map),
+  "locate", and recoloring via the **Burg Groups editor** (add/remove a custom group, reassign a
+  burg's group). **The one check that matters most here**: with a good number of burgs on the map,
+  confirm burg *names* still read cleanly — not overlapping their own icon, not drifting oddly away
+  from their burg, and not overlapping other labels either. This exercises `label-spread.ts`'s
+  rewritten burg-icon geometry lookup (see `MIGRATION.md`), which isn't covered by any automated
+  test and affects label placement for *every* label type, not just burg names, if it's subtly wrong.
+  Also try **Tools → Create a submap** with "Rescale burg styles" checked — this exercises a real
+  crash that was found and fixed during this conversion. Same map-click/hover uncertainty as the
+  other layers above applies to clicking a burg icon directly (Burgs Overview access is unaffected).
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
 `src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`,
-`src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`, `src/renderers/draw-markers.ts`) and
-what's still unconverted. **Also worth knowing**: image export (SVG/PNG/JPEG/tiles, via the Export
-menu) currently omits all 8 converted layers entirely — a real, newly-discovered gap, not something
-to re-report as a surprise; see `MIGRATION.md`'s Phase 5 section for details.
+`src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`, `src/renderers/draw-markers.ts`,
+`src/renderers/draw-burg-icons.ts`, `src/controllers/label-spread.ts`) and what's still unconverted.
+**Also worth knowing**: image export (SVG/PNG/JPEG/tiles, via the Export menu) currently omits all 9
+converted layers entirely — a real, newly-discovered gap, not something to re-report as a surprise;
+see `MIGRATION.md`'s Phase 5 section for details.
 
 ## 6. Verify nothing's broken after a change
 
