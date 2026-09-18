@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test, vi } from "vitest";
-import { setViewportSize, setViewportTransform } from "@/components/viewport";
 import type { River } from "@/generators/river-generator";
-import { ViewportLayers } from "@/renderers/viewport/viewport-renderer";
 
-const mocks = vi.hoisted(() => ({ layerOn: true }));
-vi.mock("@/components/layers", () => ({ Layers: { isOn: () => mocks.layerOn } }));
+// This exercises the real Leaflet map (a real DOM is needed to construct it), not a fake — unlike
+// zoom.test.ts, nothing here needs the deterministic camera behavior that fake replaces
+vi.mock("@/components/layers", () => ({ Layers: {} }));
 
-import { drawRivers, getRiverBox, redrawRiver, setEditedRiver, toggleBasinHighlight } from "./draw-rivers";
+import { drawRivers, getRiverBox, redrawRiver, toggleBasinHighlight } from "./draw-rivers";
 
 function river(i: number, x: number, basin = i): River {
   const points: [number, number][] = [
@@ -26,43 +25,44 @@ const addMeandering = vi.fn(
       number
     ][]
 );
-const getRiverPath = vi.fn(
-  (points: [number, number, number][]) => `M${points.map(([x, y]) => `${x},${y}`).join("L")}Z`
-);
-
-beforeEach(() => {
-  mocks.layerOn = true;
-  document.body.innerHTML = '<svg id="map"><g id="rivers"></g></svg>';
-  globalThis.pack = { rivers: [river(1, 0), river(2, 500)] } as never;
-  globalThis.Rivers = { addMeandering, getRiverPath, getOffset: () => 1 } as never;
-  addMeandering.mockClear();
-  setViewportSize(100, 100);
-  setViewportTransform(1, 0, 0);
-  setEditedRiver(null);
+// a simple square ring around the centerline, offset by a fixed "width" of 1 on each side — enough
+// to exercise ring construction and bounds without needing the real curve/offset math
+const getRiverPolygonRing = vi.fn((points: [number, number, number][]): [number, number][] => {
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const x0 = Math.min(...xs) - 1;
+  const x1 = Math.max(...xs) + 1;
+  const y0 = Math.min(...ys) - 1;
+  const y1 = Math.max(...ys) + 1;
+  return [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+    [x0, y0]
+  ];
 });
 
-test("panning culls rivers and reuses the elements already materialized", () => {
+beforeEach(() => {
+  // deliberately not resetting the DOM: the Leaflet map/pane is a module-level singleton (see
+  // leaflet-map.ts) that persists across tests in this file — drawRivers()'s own clearLayers() +
+  // addData() reconciliation is what each test relies on, not a clean slate
+  globalThis.pack = { rivers: [river(1, 0), river(2, 500)] } as never;
+  globalThis.Rivers = { addMeandering, getRiverPolygonRing } as never;
+  addMeandering.mockClear();
+  getRiverPolygonRing.mockClear();
+});
+
+test("draws every river and tags each rendered path with its id", () => {
   drawRivers();
-  const first = document.getElementById("river1");
-  expect(first).not.toBeNull();
-  expect(document.getElementById("river2")).toBeNull();
-
-  ViewportLayers.renderNow();
-  expect(document.getElementById("river1")).toBe(first);
-  expect(addMeandering).toHaveBeenCalledTimes(2); // paths are built once, not per frame
-
-  setViewportTransform(1, -500, 0);
-  ViewportLayers.renderNow();
-  expect(document.getElementById("river1")).toBeNull();
-  expect(document.getElementById("river2")?.getAttribute("d")).toBe("M500,10L520,30L540,50Z");
+  expect(document.getElementById("river1")).not.toBeNull();
+  expect(document.getElementById("river2")).not.toBeNull();
   expect(addMeandering).toHaveBeenCalledTimes(2);
 });
 
-test("the edited river stays rendered off-screen and keeps its node across redraws", () => {
+test("redrawing one river leaves the others untouched", () => {
   drawRivers();
-  setEditedRiver(2);
-  const edited = document.getElementById("river2");
-  expect(edited).not.toBeNull();
+  const other = document.getElementById("river1");
 
   pack.rivers[1].cells = [1, 2];
   pack.rivers[1].points = [
@@ -70,68 +70,39 @@ test("the edited river stays rendered off-screen and keeps its node across redra
     [560, 60]
   ];
   redrawRiver(pack.rivers[1]);
-  expect(document.getElementById("river2")).toBe(edited);
-  expect(edited?.getAttribute("d")).toBe("M500,10L560,60Z");
 
-  setEditedRiver(null);
-  ViewportLayers.renderNow();
-  expect(document.getElementById("river2")).toBeNull();
+  expect(document.getElementById("river1")).toBe(other); // untouched, same node
+  expect(document.getElementById("river2")).not.toBeNull();
 });
 
-test("basin highlight paints every river and is reapplied to newly materialized ones", () => {
+test("a full redraw drops rivers that no longer exist", () => {
   drawRivers();
-  expect(toggleBasinHighlight()).toBe(true);
-  expect(document.getElementById("river1")?.getAttribute("fill")).toBe("#1f77b4");
-
-  setViewportTransform(1, -500, 0);
-  ViewportLayers.renderNow();
-  expect(document.getElementById("river2")?.getAttribute("fill")).toBe("#ff7f0e");
-
-  expect(toggleBasinHighlight()).toBe(false);
-  expect(document.getElementById("river2")?.hasAttribute("fill")).toBe(false);
-});
-
-test("redraw picks up new courses and removed rivers", () => {
-  drawRivers();
-  const oldPath = document.getElementById("river1")!.getAttribute("d");
-
-  pack.rivers[0].cells = [1, 2];
-  pack.rivers[0].points = [
-    [5, 15],
-    [25, 35]
-  ];
   pack.rivers = [pack.rivers[0]];
   drawRivers();
-  expect(document.getElementById("river1")?.getAttribute("d")).not.toBe(oldPath);
-  expect(document.getElementById("rivers")!.childElementCount).toBe(1);
+  expect(document.getElementById("river1")).not.toBeNull();
+  expect(document.getElementById("river2")).toBeNull();
   expect(getRiverBox(2)).toBeNull();
 });
 
-test("a river bounding box is available whether or not the river is on screen", () => {
+test("a river bounding box is available in world-space coordinates", () => {
   drawRivers();
-  const box = getRiverBox(2)!;
-  expect(box.x).toBe(499); // the course inflated by the river width
+  const box = getRiverBox(1)!;
+  // river(1, 0): points span x 0..40, y 10..50; the fake ring inflates by 1 on every side
+  expect(box.x).toBe(-1);
   expect(box.width).toBe(42);
+  expect(box.y).toBe(9);
+  expect(box.height).toBe(42);
 });
 
-test("full-map export materializes every river at once, leaving the live map culled", () => {
+test("basin highlight paints every river distinctly and clears back to none", () => {
   drawRivers();
-  const clone = document.getElementById("map")!.cloneNode(true) as SVGSVGElement;
-  ViewportLayers.renderTo(clone);
-  expect(clone.querySelectorAll("#rivers > path")).toHaveLength(2);
-  expect(document.getElementById("river2")).toBeNull();
-});
+  expect(toggleBasinHighlight()).toBe(true);
+  expect(document.getElementById("river1")?.getAttribute("fill")).toBe("#1f77b4");
+  expect(document.getElementById("river2")?.getAttribute("fill")).toBe("#ff7f0e");
 
-test("viewport rendering leaves a disabled layer empty", () => {
-  drawRivers();
-  mocks.layerOn = false;
-  document.getElementById("rivers")!.replaceChildren(); // the layer registry erases the content when hidden
-  ViewportLayers.renderNow();
-  expect(document.getElementById("rivers")!.childElementCount).toBe(0);
-
-  mocks.layerOn = true;
-  ViewportLayers.renderNow();
-  expect(document.getElementById("river1")).not.toBeNull();
+  expect(toggleBasinHighlight()).toBe(false);
+  expect(document.getElementById("river1")?.hasAttribute("fill")).toBe(false);
+  expect(document.getElementById("river2")?.hasAttribute("fill")).toBe(false);
 });
 
 test("rivers with mismatched points fall back to the cell course", () => {

@@ -39,8 +39,11 @@ function apply(...ids: StyleLayerId[]): void {
 
 // CSS properties with the same meaning as their SVG presentation-attribute namesakes — the only
 // ones worth writing onto a Leaflet pane (a plain <div>, not an SVGElement): setAttribute("opacity",
-// ...) on an HTMLElement is a silent no-op, unlike on an SVG group
-const CSS_COMPATIBLE_ATTRS = new Set(["opacity", "filter", "mask"]);
+// ...) on an HTMLElement is a silent no-op, unlike on an SVG group. "fill" matters for rivers
+// specifically: every river shares one color via inheritance from its container rather than a
+// per-feature color, same as it always did — an explicit per-feature fill (states/provinces/etc.
+// all set one) still overrides an inherited one, so this is safe for every other layer too
+const CSS_COMPATIBLE_ATTRS = new Set(["opacity", "filter", "mask", "fill"]);
 
 function writeNode(el: Element, node: object): void {
   const isHtmlElement = !(el instanceof SVGElement);

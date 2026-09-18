@@ -147,7 +147,7 @@ function renderDialog(): void {
   applyLineHighlighting(dialogId, ({ target, cellId }) => {
     const riverId = pack.cells.r[cellId];
     if (riverId) return riverId;
-    const river = target.closest<SVGElement>("#rivers [id^='river']");
+    const river = target.closest<SVGElement>("[id^='river']");
     return river && /^river\d+$/.test(river.id) ? Number(river.id.slice(5)) : undefined;
   });
 
@@ -242,12 +242,12 @@ function renderRiversPage(view: TableView<River>): void {
 function riverHighlightOn(event: Event): void {
   Layers.show("rivers");
   const r = +(event.target as HTMLElement).dataset.id!;
-  select("#rivers").select(`#river${r}`).attr("stroke", "red").attr("stroke-width", 1);
+  select(`#river${r}`).attr("stroke", "red").attr("stroke-width", 1);
 }
 
 function riverHighlightOff(e: Event): void {
   const r = +(e.target as HTMLElement).dataset.id!;
-  select("#rivers").select(`#river${r}`).attr("stroke", null).attr("stroke-width", null);
+  select(`#river${r}`).attr("stroke", null).attr("stroke-width", null);
 }
 
 function zoomToRiver(this: HTMLElement): void {

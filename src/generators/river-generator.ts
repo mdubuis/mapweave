@@ -504,6 +504,20 @@ class RiverModule {
     return points.map(([x, y], idx) => [x, y, flux[idx]]);
   }
 
+  /** Course length: the sum of segment distances along the (already meandered) centerline. Used
+   *  where a rendered river path's `getTotalLength()` isn't available (Leaflet, not SVG) — see
+   *  MIGRATION.md Phase 5. A direct geometric measure, not an approximation of the old
+   *  ribbon-perimeter-halved value it replaces */
+  getRiverLength(meanderedPoints: [number, number, number][]): number {
+    let length = 0;
+    for (let k = 1; k < meanderedPoints.length; k++) {
+      const [x1, y1] = meanderedPoints[k - 1];
+      const [x2, y2] = meanderedPoints[k];
+      length += Math.hypot(x2 - x1, y2 - y1);
+    }
+    return length;
+  }
+
   // anchor positions per river cell (cell centers, or override anchors), with -1 cells resolved to the map edge
   getRiverPoints(riverCells: number[], riverPoints: Point[] | null = null): Point[] {
     if (riverPoints) return riverPoints;
@@ -540,9 +554,10 @@ class RiverModule {
     return rn(Math.min(flux ** 0.9 / this.FLUX_FACTOR, this.MAX_FLUX_WIDTH), 2);
   }
 
-  // build polygon from a list of points and calculated offset (width)
-  getRiverPath(points: [number, number, number][], widthFactor: number, startingWidth: number) {
-    this.lineGen.curve(curveCatmullRom.alpha(0.1));
+  // the river course offset left/right by its width at each point — shared by getRiverPath (an SVG/
+  // Path2D "d" string, smoothed with a Catmull-Rom curve) and getRiverPolygonRing (a straight-line
+  // GeoJSON ring, for Leaflet — see MIGRATION.md Phase 5). Never mutates `points`
+  private getOffsetPoints(points: [number, number, number][], widthFactor: number, startingWidth: number) {
     const riverPointsLeft: [number, number][] = [];
     const riverPointsRight: [number, number][] = [];
     let flux = 0;
@@ -567,11 +582,34 @@ class RiverModule {
       riverPointsRight.push([x1 + sinOffset, y1 - cosOffset]);
     }
 
-    const right = this.lineGen(riverPointsRight.reverse());
+    return { riverPointsLeft, riverPointsRight };
+  }
+
+  // build polygon from a list of points and calculated offset (width)
+  getRiverPath(points: [number, number, number][], widthFactor: number, startingWidth: number) {
+    this.lineGen.curve(curveCatmullRom.alpha(0.1));
+    const { riverPointsLeft, riverPointsRight } = this.getOffsetPoints(points, widthFactor, startingWidth);
+
+    const right = this.lineGen([...riverPointsRight].reverse());
     let left = this.lineGen(riverPointsLeft) || "";
     left = left.substring(left.indexOf("C"));
 
     return round(right + left, 1);
+  }
+
+  /** Same ribbon polygon as getRiverPath, as a closed [x, y] ring instead of a curved SVG path
+   *  string — GeoJSON has no bezier curves, so this skips the Catmull-Rom smoothing entirely and
+   *  connects the offset points with straight lines (meander() already samples densely enough that
+   *  this reads as smooth at normal zoom levels) */
+  getRiverPolygonRing(
+    points: [number, number, number][],
+    widthFactor: number,
+    startingWidth: number
+  ): [number, number][] {
+    const { riverPointsLeft, riverPointsRight } = this.getOffsetPoints(points, widthFactor, startingWidth);
+    const ring = [...riverPointsRight].reverse().concat(riverPointsLeft);
+    if (ring.length) ring.push(ring[0]);
+    return ring;
   }
 
   specify() {

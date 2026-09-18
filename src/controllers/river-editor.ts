@@ -159,7 +159,8 @@ function updateRiverData(): void {
 }
 
 function updateRiverLength(river: River): void {
-  river.length = rn((selectedRiver.node() as SVGGeometryElement).getTotalLength() / 2, 2);
+  const meanderedPoints = Rivers.addMeandering(river.cells, river.points ?? null);
+  river.length = rn(Rivers.getRiverLength(meanderedPoints), 2);
   const lengthUI = `${rn(river.length * options.map.units.distance.scale)} ${options.map.units.distance.unit}`;
   ensureEl<HTMLInputElement>("riverLength").value = lengthUI;
 }

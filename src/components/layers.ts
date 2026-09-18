@@ -25,7 +25,7 @@ import { drawPrecipitation, removePrecipitation } from "@/renderers/draw-precipi
 import { drawProvinces, ensureProvincesPane, eraseProvinces } from "@/renderers/draw-provinces";
 import { drawRelief, removeRelief } from "@/renderers/draw-relief-icons";
 import { drawReligions, ensureReligionsPane, eraseReligions } from "@/renderers/draw-religions";
-import { drawRivers } from "@/renderers/draw-rivers";
+import { drawRivers, ensureRiversPane, eraseRivers } from "@/renderers/draw-rivers";
 import { drawRoutes, removeRoutes } from "@/renderers/draw-routes";
 import { drawScaleBar, removeScaleBar } from "@/renderers/draw-scalebar";
 import { drawStates, eraseStates } from "@/renderers/draw-states";
@@ -327,7 +327,14 @@ const mapLayers = [
     parent: "viewbox",
     children: [{ id: "compassRose", tag: "use", attrs: { href: "#defs-compass-rose" } }]
   }),
-  new Layer({ id: "rivers", parent: "viewbox", draw: drawRivers }),
+  new Layer({
+    id: "rivers",
+    element: "rivers-leaflet",
+    parent: "leaflet",
+    draw: drawRivers,
+    erase: eraseRivers,
+    ensurePane: ensureRiversPane
+  }),
   new Layer({ id: "relief", element: "terrain", parent: "viewbox", draw: drawRelief, erase: removeRelief }),
   new Layer({
     id: "religions",

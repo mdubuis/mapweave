@@ -31,6 +31,12 @@ export function getLeafletMap(): L.Map {
     maxZoom: 20
   });
 
+  // Leaflet's vector layers silently render nothing (no error) until the map has an established
+  // view (map._loaded) — a real risk here, since a "leaflet"-parented layer's first draw() can run
+  // before components/zoom.ts ever calls setView/flyTo. This placeholder view unblocks rendering
+  // immediately; the real initial view the app fits to replaces it moments later, same as always
+  map.setView(L.latLng(0, 0), map.getMinZoom(), { animate: false });
+
   mountLegacySvg(map);
   return map;
 }
