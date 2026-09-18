@@ -165,7 +165,6 @@ function confirmRemove(marker: Marker): void {
     confirm: "Remove",
     onConfirm: () => {
       Markers.deleteMarker(marker.i);
-      document.getElementById(`marker${marker.i}`)?.remove();
       refreshEditors();
       applyRadius(getRadius());
     }

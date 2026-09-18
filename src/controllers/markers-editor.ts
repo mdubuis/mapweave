@@ -1,4 +1,3 @@
-import { type D3DragEvent, drag, select } from "d3";
 import { closeDialogs, confirmationDialog, destroyDialog, refreshEditors } from "@/components/dialog/dialog-helpers";
 import { stopMapPlacement } from "@/components/map-placement";
 import { clearMainTip } from "@/components/tooltips";
@@ -9,21 +8,23 @@ import { drawMarkers, setEditedMarker } from "@/renderers/draw-markers";
 import { activeEra, wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import { ensureEl, escapeHtml, findEl, isImageIcon, rn } from "../utils";
 
-let selectedElement: SVGSVGElement;
 let selectedMarker: Marker;
 
 function open(markerI?: number, target?: Element): void {
   if (customization) return;
   closeDialogs(".stable");
 
-  const found = getElement(markerI, target);
-  if (!found) return;
-  [selectedElement, selectedMarker] = found;
+  const marker = findMarker(markerI, target);
+  if (!marker) return;
+  selectedMarker = marker;
 
-  select<SVGElement, unknown>(selectedElement)
-    .raise()
-    .call(drag<SVGElement, unknown>().on("start", dragMarker))
-    .classed("draggable", true);
+  // dragging is native Leaflet marker dragging (see marker-layer.ts), not d3-drag on raw SVG attrs
+  setEditedMarker(selectedMarker, (x, y) => {
+    selectedMarker.x = rn(x, 2);
+    selectedMarker.y = rn(y, 2);
+    selectedMarker.cell = Pack.findCell(selectedMarker.x, selectedMarker.y)!;
+    drawMarkers();
+  });
 
   if (findEl("notesEditor")) {
     void Controllers.NotesEditor.open({ type: "marker", id: selectedMarker.i });
@@ -128,43 +129,15 @@ function renderDialog(): void {
   ensureEl("markerRemove").addEventListener("click", confirmMarkerDeletion);
 }
 
-function getElement(markerI?: number, target?: Element): [SVGSVGElement, Marker] | null {
+function findMarker(markerI?: number, target?: Element): Marker | null {
   const id = target ? Number(target.closest("svg")?.id.slice(6)) : markerI;
-  const marker = pack.markers.find(({ i }) => i === id);
-  if (!marker) return null;
-  setEditedMarker(marker);
-  const element = findEl<SVGSVGElement>(`marker${id}`);
-  if (!element) setEditedMarker(null);
-  return element ? [element, marker] : null;
+  return pack.markers.find(({ i }) => i === id) ?? null;
 }
 
 function getSameTypeMarkers(): Marker[] {
   const currentType = selectedMarker.type;
   if (!currentType) return [selectedMarker];
   return pack.markers.filter(({ type }) => type === currentType);
-}
-
-function dragMarker(this: SVGElement, event: D3DragEvent<SVGElement, unknown, unknown>): void {
-  const dx = +this.getAttribute("x")! - event.x;
-  const dy = +this.getAttribute("y")! - event.y;
-
-  event.on("drag", function (this: SVGElement, dragEvent: D3DragEvent<SVGElement, unknown, unknown>) {
-    this.setAttribute("x", String(dx + dragEvent.x));
-    this.setAttribute("y", String(dy + dragEvent.y));
-  });
-
-  event.on("end", function (this: SVGElement, dragEvent: D3DragEvent<SVGElement, unknown, unknown>) {
-    const { x, y } = dragEvent;
-    this.setAttribute("x", String(rn(dx + x, 2)));
-    this.setAttribute("y", String(rn(dy + y, 2)));
-
-    const zoomSize = Number(this.getAttribute("width"));
-
-    selectedMarker.x = rn(x + dx + zoomSize / 2, 1);
-    selectedMarker.y = rn(y + dy + zoomSize, 1);
-    selectedMarker.cell = Pack.findCell(selectedMarker.x, selectedMarker.y)!;
-    drawMarkers();
-  });
 }
 
 function updateInputs(): void {
@@ -301,7 +274,6 @@ function deleteMarker(): void {
 }
 
 function closeMarkerEditor(): void {
-  select(selectedElement).on(".drag", null).classed("draggable", false);
   setEditedMarker(null);
   if (ensureEl("addMarker").classList.contains("pressed")) stopMapPlacement();
   clearMainTip();

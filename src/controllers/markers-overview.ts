@@ -385,7 +385,7 @@ function changeMarkerType(): void {
 
 function removeMarker(i: number): void {
   pack.markers = pack.markers.filter(marker => marker.i !== i);
-  document.getElementById(`marker${i}`)?.remove();
+  Layers.draw("markers");
   markersTable.refresh();
 }
 
@@ -399,13 +399,8 @@ function triggerRemoveAll(): void {
 }
 
 function removeAllMarkers(): void {
-  pack.markers = pack.markers.filter(({ i, lock }) => {
-    if (lock) return true;
-
-    document.getElementById(`marker${i}`)?.remove();
-    return false;
-  });
-
+  pack.markers = pack.markers.filter(({ lock }) => lock);
+  Layers.draw("markers");
   markersTable.refresh();
 }
 

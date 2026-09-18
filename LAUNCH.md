@@ -139,11 +139,11 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and seven layers — the five territory layers (**biomes**, **religions**, **cultures**,
-**provinces**, **states**) plus **rivers** and **routes** — are now actually rendered by Leaflet
-(`L.geoJSON()`) rather than hand-drawn SVG. Everything else (burgs, markers, the minimap, the ruler)
-is still on the old code, unconverted. There's no visible UI difference to look for beyond those
-layers — the useful check is that nothing *regressed*:
+d3-zoom code, and eight layers — the five territory layers (**biomes**, **religions**, **cultures**,
+**provinces**, **states**) plus **rivers**, **routes**, and **markers** — are now actually rendered
+by Leaflet (`L.geoJSON()`/`L.marker`) rather than hand-drawn SVG. Everything else (burgs, the
+minimap, the ruler) is still on the old code, unconverted. There's no visible UI difference to look
+for beyond those layers — the useful check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
@@ -204,12 +204,29 @@ layers — the useful check is that nothing *regressed*:
   needing to reopen the editor. Try **Route Groups editor**: add a custom group, assign a route to
   it, remove a group — the group list and route colors should stay in sync. Same map-click/hover
   uncertainty as rivers applies here too (see above).
+- **Markers**: markers should render with the same pin shapes/icons/colors as before. Open a marker
+  (via **Markers Overview**'s pencil icon, not by clicking the map — see below) and **drag it** on
+  the map: it should move smoothly (this is now real native Leaflet dragging, not the old
+  d3-drag-on-SVG-attributes code) and land at the new position once released. While editing, change
+  its icon, pin shape, size, or colors in the dialog — the marker should update live and *stay
+  draggable*. Zoom in/out and confirm marker icons resize (the "rescale" style option, on by
+  default) — the resize should settle once the zoom gesture ends, not stutter mid-gesture. Try
+  **Markers Overview**: filter by state/culture/type/search (only matching markers should show on
+  the map), pin/unpin, lock/unlock, "locate" (zoom + flash outline), and remove one/remove all
+  unlocked. Try **Markers in Radius** (the dot-circle icon in the marker editor): the radius circle
+  and the in-range list should stay in sync as you change the radius, and removing a marker from the
+  list should update both the list and the map. Same map-click/hover uncertainty as rivers/routes
+  applies here too (see above) — clicking a marker pin directly on the map to open its editor is not
+  guaranteed to work yet.
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
 `src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`,
-`src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`) and what's still unconverted.
+`src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`, `src/renderers/draw-markers.ts`) and
+what's still unconverted. **Also worth knowing**: image export (SVG/PNG/JPEG/tiles, via the Export
+menu) currently omits all 8 converted layers entirely — a real, newly-discovered gap, not something
+to re-report as a surprise; see `MIGRATION.md`'s Phase 5 section for details.
 
 ## 6. Verify nothing's broken after a change
 

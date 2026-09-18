@@ -15,7 +15,7 @@ import { drawJourneys } from "@/renderers/draw-journeys";
 import { drawLakes } from "@/renderers/draw-lakes";
 import { drawLandmass } from "@/renderers/draw-landmass";
 import { redrawLegend } from "@/renderers/draw-legend";
-import { drawMarkers } from "@/renderers/draw-markers";
+import { drawMarkers, ensureMarkersPane, eraseMarkers } from "@/renderers/draw-markers";
 import { drawMarkets } from "@/renderers/draw-markets";
 import { drawMeasurers } from "@/renderers/draw-measurers";
 import { drawMilitary } from "@/renderers/draw-military";
@@ -445,7 +445,14 @@ const mapLayers = [
     erase: removeLabels
   }),
   new Layer({ id: "military", element: "armies", parent: "viewbox", draw: drawMilitary }),
-  new Layer({ id: "markers", parent: "viewbox", draw: drawMarkers }),
+  new Layer({
+    id: "markers",
+    element: "markers-leaflet",
+    parent: "leaflet",
+    draw: drawMarkers,
+    erase: eraseMarkers,
+    ensurePane: ensureMarkersPane
+  }),
   new Layer({ id: "fogging", parent: "viewbox", attrs: { mask: "url(#fog)" }, permanent: true, draw: drawFogging }),
   new Layer({ id: "journeys", parent: "viewbox", draw: drawJourneys }),
   new Layer({ id: "rulers", element: "ruler", parent: "viewbox", draw: drawMeasurers }),

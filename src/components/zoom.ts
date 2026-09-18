@@ -3,6 +3,7 @@ import * as L from "leaflet";
 import { Layers } from "@/components/layers";
 import { getLeafletMap, isLeafletMapReady } from "@/components/leaflet-map";
 import { setViewportTransform, viewport } from "@/components/viewport";
+import { refreshMarkersZoomSize } from "@/renderers/draw-markers";
 import { ViewportLayers } from "@/renderers/viewport/viewport-renderer";
 import { ensureEl, findEl } from "@/utils/nodeUtils";
 import { rn } from "@/utils/numberUtils";
@@ -124,6 +125,7 @@ export function invokeActiveZooming(): void {
 
   if (options.map.labels.resizeOnZoom) applyLabelsZoomSize();
   ViewportLayers.renderNow();
+  refreshMarkersZoomSize();
 
   if (!customization && !isOptimized) {
     const statesHalo = select("#statesHalo");
