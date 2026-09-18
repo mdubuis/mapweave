@@ -139,10 +139,10 @@ its own tab if you'd rather not have it embedded.
 ## 5. Try the Leaflet camera and the converted layers (Phase 5, in progress)
 
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
-d3-zoom code, and six layers — the five territory layers (**biomes**, **religions**, **cultures**,
-**provinces**, **states**) plus **rivers** — are now actually rendered by Leaflet (`L.geoJSON()`)
-rather than hand-drawn SVG. Everything else (routes, burgs, markers, the minimap, the ruler) is
-still on the old code, unconverted. There's no visible UI difference to look for beyond those
+d3-zoom code, and seven layers — the five territory layers (**biomes**, **religions**, **cultures**,
+**provinces**, **states**) plus **rivers** and **routes** — are now actually rendered by Leaflet
+(`L.geoJSON()`) rather than hand-drawn SVG. Everything else (burgs, markers, the minimap, the ruler)
+is still on the old code, unconverted. There's no visible UI difference to look for beyond those
 layers — the useful check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
@@ -196,12 +196,20 @@ layers — the useful check is that nothing *regressed*:
   (unlike the five previous layers, rivers were never click-through by design) — a "no" here isn't
   a regression from this session's work, it's the click-delegation gap already tracked in
   `MIGRATION.md` as still-pending, now confirmed to matter for rivers specifically.
+- **Routes**: roads/trails/sea routes should each keep their own distinct color/width/dash style
+  (not all one color like rivers). Open the **Route editor** on one (via Routes Overview) and drag a
+  control point — same "updates live, other routes untouched" check as rivers, plus **specifically**:
+  change the route's group in the editor (the dropdown) while still editing it — the route should
+  recolor to match the new group *and remain editable* (draggable, clickable to add points) without
+  needing to reopen the editor. Try **Route Groups editor**: add a custom group, assign a route to
+  it, remove a group — the group list and route colors should stay in sync. Same map-click/hover
+  uncertainty as rivers applies here too (see above).
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`, `src/renderers/draw-religions.ts`,
 `src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`, `src/renderers/draw-states.ts`,
-`src/renderers/draw-rivers.ts`) and what's still unconverted.
+`src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`) and what's still unconverted.
 
 ## 6. Verify nothing's broken after a change
 
