@@ -141,17 +141,18 @@ its own tab if you'd rather not have it embedded.
 Pan/zoom on the map screen is now driven by a real Leaflet map instance instead of the previous
 d3-zoom code, and nine layers — the five territory layers (**biomes**, **religions**, **cultures**,
 **provinces**, **states**) plus **rivers**, **routes**, **markers**, and **burg icons** — are now
-actually rendered by Leaflet (`L.geoJSON()`/`L.marker`) rather than hand-drawn SVG. Everything else
-(the minimap, the ruler) is still on the old code, unconverted. There's no visible UI difference to
-look for beyond those layers — the useful check is that nothing *regressed*:
+actually rendered by Leaflet (`L.geoJSON()`/`L.marker`) rather than hand-drawn SVG. Clicking any of
+the four interactive ones (rivers/routes/markers/burg icons) directly on the map now opens its
+editor too — that used to be broken. The **minimap** (opened via its own toolbar button) has also
+been rebuilt on a second, independent Leaflet map instance. Everything else (the ruler) is still on
+the old code, unconverted. There's no visible UI difference to look for beyond those — the useful
+check is that nothing *regressed*:
 
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
   load and center correctly.
 - Zoom in enough to trigger label resizing — reads `viewport.scale`, now fed by Leaflet rather
   than d3.
-- The minimap (bottom-left, if enabled) should still track the viewport rectangle correctly while
-  panning/zooming.
 - Open the Style Editor for Biomes/Religions/Cultures/Provinces and check the opacity slider has a
   visible effect, and that these layers *aren't* fully opaque by default (this exercises a real,
   retroactive bug found and fixed — see `MIGRATION.md`). Biomes specifically should never paint
@@ -233,17 +234,26 @@ look for beyond those layers — the useful check is that nothing *regressed*:
   **Add Label**, and the river auto-creator — try clicking on empty land, not just clicking near an
   existing icon (clicking exactly on top of an existing burg/marker/river/route icon while placing a
   new one is a known, accepted gap — nothing should place there, but it also shouldn't error).
+- **Minimap**: open it from its toolbar button. It's now a second, independent Leaflet map, not a
+  live mirror of the main one — confirm states render with their real colors at the right overall
+  shape/extent. Click inside the minimap: the main map should center on that spot. Pan/zoom the main
+  map and confirm the dashed viewport rectangle on the minimap tracks it smoothly. Close and reopen
+  the dialog a few times — should never error or show a blank/broken map on reopen. **Known, accepted
+  behavior, not a bug**: the minimap only shows the states layer (not rivers/routes/icons — illegible
+  at that scale anyway), and its content only refreshes when the dialog (re)opens, not live while
+  it's left open — recoloring a state while the minimap stays open won't show up until you close and
+  reopen it.
 
 If any of that feels off, that's the regression to report — see `MIGRATION.md`'s Phase 5 section
 for exactly what changed (`src/components/zoom.ts`, `src/components/leaflet-map.ts`,
 `src/components/viewbox-events.ts`, `src/renderers/leaflet/`, `src/renderers/draw-biomes.ts`,
 `src/renderers/draw-religions.ts`, `src/renderers/draw-cultures.ts`, `src/renderers/draw-provinces.ts`,
 `src/renderers/draw-states.ts`, `src/renderers/draw-rivers.ts`, `src/renderers/draw-routes.ts`,
-`src/renderers/draw-markers.ts`, `src/renderers/draw-burg-icons.ts`, `src/controllers/label-spread.ts`)
-and what's still unconverted (the minimap — see `MIGRATION.md`). **Also worth knowing**: image export
-(SVG/PNG/JPEG/tiles, via the Export menu) currently omits all 9 converted layers entirely — a real,
-newly-discovered gap, not something to re-report as a surprise; see `MIGRATION.md`'s Phase 5 section
-for details.
+`src/renderers/draw-markers.ts`, `src/renderers/draw-burg-icons.ts`, `src/controllers/label-spread.ts`,
+`src/controllers/minimap.ts`) and what's still unconverted (mainly the ruler — see `MIGRATION.md`).
+**Also worth knowing**: image export (SVG/PNG/JPEG/tiles, via the Export menu) currently omits all 9
+converted layers entirely — a real, newly-discovered gap, not something to re-report as a surprise;
+see `MIGRATION.md`'s Phase 5 section for details.
 
 ## 6. Verify nothing's broken after a change
 

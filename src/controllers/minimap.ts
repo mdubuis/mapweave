@@ -1,11 +1,30 @@
+// The old minimap mirrored #viewbox live via <use href="#viewbox"> — free, but only ever showed
+// legacy SVG content. Once biomes/religions/cultures/provinces/states/rivers/routes/markers/burgs
+// moved into separate Leaflet panes (Phase 5), that mirror silently stopped showing any of them.
+// Rebuilt as its own small, independent L.Map instance instead: no panning/zooming of its own, a
+// states-colored overview layer, and a rectangle tracking the main map's current view. Territory
+// content is a real (if simplified) render of the current pack.states, not a DOM copy, so it needs
+// its own explicit refresh — see refreshMinimapContent(). See MIGRATION.md Phase 5.
+import * as L from "leaflet";
 import { closeDialogs } from "@/components/dialog/dialog-helpers";
+import { LinearSimpleCRS } from "@/components/leaflet-map";
 import { viewport } from "@/components/viewport";
-import { ensureEl, minmax, rn } from "../utils";
+import { zoomTo } from "@/components/zoom";
+import {
+  buildTerritoryFeatureCollection,
+  type TerritoryFeatureProperties
+} from "@/renderers/leaflet/territory-geojson";
+import { ensureEl, minmax } from "../utils";
+
+let minimapMap: L.Map | undefined;
+let territoryLayer: L.GeoJSON<TerritoryFeatureProperties> | undefined;
+let viewportRect: L.Rectangle | undefined;
 
 function open(): void {
   closeDialogs("#minimap, .stable");
   renderDialog();
-  updateMinimap();
+  createMinimapMap();
+  refreshMinimapContent();
 
   $("#minimap").dialog({
     title: "Minimap",
@@ -21,16 +40,13 @@ function open(): void {
 
 function renderDialog(): void {
   document.getElementById("minimap")?.remove();
+  const { width, height } = options.map.graph;
   const html = /* html */ `<div id="minimap" class="dialog stable">
       <div id="minimapViewportWrap">
-        <svg id="minimapSurface" preserveAspectRatio="xMidYMid meet" aria-label="Map minimap">
-          <use id="minimapMapUse" href="#viewbox"></use>
-          <rect id="minimapViewport"></rect>
-        </svg>
+        <div id="minimapMap" style="aspect-ratio: ${width} / ${height}"></div>
       </div>
     </div>`;
   ensureEl("dialogs").insertAdjacentHTML("beforeend", html);
-  ensureEl("minimapSurface").addEventListener("click", minimapClickToPan);
 
   document.getElementById("minimapStyles")?.remove();
   const style = document.createElement("style");
@@ -52,24 +68,11 @@ function renderDialog(): void {
       border: 0;
     }
 
-    #minimapSurface {
+    #minimapMap {
       display: block;
       width: 100%;
-      height: auto;
       cursor: crosshair;
-    }
-
-    #minimapMapUse {
-      pointer-events: none;
-    }
-
-    #minimapViewport {
-      fill: rgba(190, 255, 137, 0.1);
-      stroke: #624954;
-      stroke-width: 1;
-      stroke-dasharray: 4;
-      vector-effect: non-scaling-stroke;
-      pointer-events: none;
+      background: #5b8dd9;
     }
   `;
   document.head.append(style);
@@ -79,49 +82,76 @@ function closeMinimap(): void {
   $("#minimap").dialog("destroy");
   ensureEl("minimap").remove();
   document.getElementById("minimapStyles")?.remove();
+  minimapMap?.remove();
+  minimapMap = undefined;
+  territoryLayer = undefined;
+  viewportRect = undefined;
 }
 
-function minimapClickToPan(event: MouseEvent): void {
-  const minimap = document.getElementById("minimapSurface") as SVGSVGElement | null;
-  if (!minimap) return;
+function createMinimapMap(): void {
+  minimapMap?.remove(); // the dialog's own DOM is rebuilt fresh on every open(); the map must be too
 
-  const point = minimap.createSVGPoint();
-  point.x = event.clientX;
-  point.y = event.clientY;
+  const { width, height } = options.map.graph;
+  const bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(height, width));
 
-  const ctm = minimap.getScreenCTM();
-  if (!ctm) return;
+  minimapMap = L.map(ensureEl<HTMLDivElement>("minimapMap"), {
+    crs: LinearSimpleCRS,
+    zoomControl: false,
+    attributionControl: false,
+    dragging: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    touchZoom: false,
+    inertia: false,
+    maxBounds: bounds
+  });
+  minimapMap.fitBounds(bounds, { animate: false });
 
-  const svgPoint = point.matrixTransform(ctm.inverse());
-  const x = minmax(svgPoint.x, 0, options.map.graph.width);
-  const y = minmax(svgPoint.y, 0, options.map.graph.height);
-  zoomTo(x, y, viewport.scale, 450);
+  territoryLayer = L.geoJSON<TerritoryFeatureProperties>(undefined, { style: territoryStyle }).addTo(minimapMap);
+  viewportRect = L.rectangle(bounds, {
+    color: "#624954",
+    weight: 1,
+    dashArray: "4",
+    fillColor: "#beff89",
+    fillOpacity: 0.1,
+    interactive: false
+  }).addTo(minimapMap);
+
+  minimapMap.on("click", (event: L.LeafletMouseEvent) => {
+    const x = minmax(event.latlng.lng, 0, width);
+    const y = minmax(event.latlng.lat, 0, height);
+    zoomTo(x, y, viewport.scale, 450);
+  });
 }
 
+function territoryStyle(feature?: GeoJSON.Feature<GeoJSON.Geometry, TerritoryFeatureProperties>) {
+  const state = feature ? pack.states[feature.properties.id] : undefined;
+  return { stroke: false, fillColor: state?.color || "#5b8dd9", fillOpacity: 1 };
+}
+
+/** Re-render the overview layer from the current pack.states — cheap enough for "on open" and after
+ *  an edit, but not something to call every pan/zoom frame (see updateMinimap below) */
+function refreshMinimapContent(): void {
+  if (!territoryLayer) return;
+  territoryLayer.clearLayers();
+  territoryLayer.addData(buildTerritoryFeatureCollection(cellId => pack.cells.state[cellId]));
+}
+
+/** Called on every pan/zoom frame of the *main* map (see zoom.ts) — kept cheap on purpose: only
+ *  repositions the viewport rectangle, never re-renders territory (see refreshMinimapContent) */
 function updateMinimap(): void {
-  const minimap = document.getElementById("minimapSurface") as SVGSVGElement | null;
-  const viewportRect = document.getElementById("minimapViewport") as SVGRectElement | null;
-  const mapUse = document.getElementById("minimapMapUse") as SVGUseElement | null;
-  if (!minimap || !viewportRect || !mapUse) return;
-
-  minimap.setAttribute("viewBox", `0 0 ${options.map.graph.width} ${options.map.graph.height}`);
-
-  // #viewbox already has the current transform; invert it in minimap to show the whole world map.
+  if (!viewportRect) return;
   const inverseScale = viewport.scale ? 1 / viewport.scale : 1;
-  mapUse.setAttribute(
-    "transform",
-    `translate(${rn(-viewport.x * inverseScale, 3)} ${rn(-viewport.y * inverseScale, 3)}) scale(${rn(inverseScale, 6)})`
-  );
+  const { width, height } = options.map.graph;
 
-  const left = Math.max(0, -viewport.x * inverseScale);
-  const top = Math.max(0, -viewport.y * inverseScale);
-  const right = Math.min(options.map.graph.width, left + viewport.width * inverseScale);
-  const bottom = Math.min(options.map.graph.height, top + viewport.height * inverseScale);
+  const left = minmax(-viewport.x * inverseScale, 0, width);
+  const top = minmax(-viewport.y * inverseScale, 0, height);
+  const right = minmax(left + viewport.width * inverseScale, 0, width);
+  const bottom = minmax(top + viewport.height * inverseScale, 0, height);
 
-  viewportRect.setAttribute("x", String(rn(left, 3)));
-  viewportRect.setAttribute("y", String(rn(top, 3)));
-  viewportRect.setAttribute("width", String(rn(Math.max(0, right - left), 3)));
-  viewportRect.setAttribute("height", String(rn(Math.max(0, bottom - top), 3)));
+  viewportRect.setBounds(L.latLngBounds(L.latLng(top, left), L.latLng(bottom, right)));
 }
 
 declare global {

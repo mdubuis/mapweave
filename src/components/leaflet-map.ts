@@ -8,7 +8,7 @@ import "leaflet/dist/leaflet.css";
  * not Leaflet's default power-of-two tile zoom. Overriding `scale`/`zoom` on CRS.Simple keeps
  * `map.getZoom()` numerically equal to that scale factor everywhere else in the app reads it.
  */
-const LinearSimpleCRS = L.extend({}, L.CRS.Simple, {
+export const LinearSimpleCRS = L.extend({}, L.CRS.Simple, {
   scale: (zoom: number) => zoom,
   zoom: (scale: number) => scale
 });
