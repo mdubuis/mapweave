@@ -78,6 +78,21 @@ export function getFeaturePane(name: string, zIndex: number): HTMLElement {
   return pane;
 }
 
+const featureLayerGroups = new Map<string, L.LayerGroup>();
+
+/** A persistent `L.layerGroup` attached to a named feature pane, created once and reused — the
+ *  bootstrap every point-icon layer (marker-layer.ts, burg-icon-layer.ts) needs, factored out so
+ *  it isn't duplicated verbatim in each one */
+export function getFeatureLayerGroup(name: string, zIndex: number): L.LayerGroup {
+  let group = featureLayerGroups.get(name);
+  if (!group) {
+    const pane = getFeaturePane(name, zIndex);
+    group = L.layerGroup([], { pane: pane.id }).addTo(getLeafletMap());
+    featureLayerGroups.set(name, group);
+  }
+  return group;
+}
+
 function ensureContainer(): HTMLDivElement {
   let container = document.getElementById("leaflet-root") as HTMLDivElement | null;
   if (!container) {

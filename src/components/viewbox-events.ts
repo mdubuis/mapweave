@@ -4,6 +4,7 @@ import { getLeafletMap } from "@/components/leaflet-map";
 import { Controllers } from "@/controllers";
 import type { LabelType } from "@/generators/labels-generator";
 import { dragLegendBox } from "@/renderers/draw-legend";
+import { markerIdFromElement } from "@/renderers/leaflet/marker-layer";
 import { debounce } from "@/utils/commonUtils";
 import { handleMouseMove } from "./map-tooltip";
 import { applyZoomBehavior } from "./zoom";
@@ -85,8 +86,8 @@ const PANE_EDITORS: Record<string, (target: Element) => void> = {
     if (path) Controllers.RouteEditor.open(path.id);
   },
   "markers-leaflet": target => {
-    const svg = target.closest<SVGSVGElement>("svg[id^='marker']");
-    if (svg) Controllers.MarkersEditor.open(Number(svg.id.slice(6)));
+    const id = markerIdFromElement(target);
+    if (id !== null) Controllers.MarkersEditor.open(id);
   },
   "burg-icons-leaflet": target => {
     const svg = target.closest<SVGSVGElement>("svg[data-id]");

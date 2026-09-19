@@ -19,7 +19,7 @@
 // stacking back toward group order, though it's no longer a hard guarantee within a group — an
 // accepted compromise, see MIGRATION.md.
 import * as L from "leaflet";
-import { getFeaturePane, getLeafletMap } from "@/components/leaflet-map";
+import { getFeatureLayerGroup, getFeaturePane, getLeafletMap } from "@/components/leaflet-map";
 import type { Burg } from "@/generators/burgs-generator";
 import { escapeHtml } from "@/utils/stringUtils";
 
@@ -66,16 +66,7 @@ const primaryMarkers = new Map<number, L.Marker>();
 const anchorMarkers = new Map<number, L.Marker>();
 const primaryMeta = new Map<number, IconMeta>();
 const anchorMeta = new Map<number, IconMeta>();
-let layerGroup: L.LayerGroup | undefined;
 let lastZoomSized: number | undefined;
-
-function ensureLayerGroup(): L.LayerGroup {
-  if (!layerGroup) {
-    const pane = getFeaturePane(PANE_NAME, Z_INDEX);
-    layerGroup = L.layerGroup([], { pane: pane.id }).addTo(getLeafletMap());
-  }
-  return layerGroup;
-}
 
 export function ensurePane(): void {
   getFeaturePane(PANE_NAME, Z_INDEX);
@@ -85,7 +76,7 @@ export function ensurePane(): void {
  *  apparent (screen) size, scaled by the current zoom — see refreshSizeForZoom for why: unlike the
  *  old renderer, nothing here is nested inside an implicitly-scaled parent transform any more */
 export function update(burgs: Burg[]): void {
-  const group = ensureLayerGroup();
+  const group = getFeatureLayerGroup(PANE_NAME, Z_INDEX);
   group.clearLayers();
   primaryMarkers.clear();
   anchorMarkers.clear();
@@ -158,7 +149,7 @@ export function update(burgs: Burg[]): void {
  *  implicitly, as part of #viewbox's own shared transform. Call on zoom end, not per frame; skips
  *  entirely when the zoom level hasn't actually changed (e.g. a pure pan) */
 export function refreshSizeForZoom(): void {
-  if (!layerGroup) return;
+  if (primaryMarkers.size === 0) return;
   const zoom = getLeafletMap().getZoom();
   if (zoom === lastZoomSized) return;
   lastZoomSized = zoom;
@@ -176,7 +167,7 @@ export function refreshSizeForZoom(): void {
 }
 
 export function clear(): void {
-  layerGroup?.clearLayers();
+  getFeatureLayerGroup(PANE_NAME, Z_INDEX).clearLayers();
   primaryMarkers.clear();
   anchorMarkers.clear();
   primaryMeta.clear();

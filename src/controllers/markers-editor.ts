@@ -5,6 +5,7 @@ import { Controllers } from "@/controllers";
 import type { Marker } from "@/generators/markers-generator";
 import { Notes } from "@/generators/notes";
 import { drawMarkers, setEditedMarker } from "@/renderers/draw-markers";
+import { markerIdFromElement } from "@/renderers/leaflet/marker-layer";
 import { activeEra, wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import { ensureEl, escapeHtml, findEl, isImageIcon, rn } from "../utils";
 
@@ -130,7 +131,7 @@ function renderDialog(): void {
 }
 
 function findMarker(markerI?: number, target?: Element): Marker | null {
-  const id = target ? Number(target.closest("svg")?.id.slice(6)) : markerI;
+  const id = target ? markerIdFromElement(target) : (markerI ?? null);
   return pack.markers.find(({ i }) => i === id) ?? null;
 }
 

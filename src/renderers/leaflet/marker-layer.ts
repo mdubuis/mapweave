@@ -11,7 +11,7 @@
 //
 // No custom viewport culling — see river-layer.ts for the same reasoning.
 import * as L from "leaflet";
-import { getFeaturePane, getLeafletMap } from "@/components/leaflet-map";
+import { getFeatureLayerGroup, getFeaturePane, getLeafletMap } from "@/components/leaflet-map";
 import type { Marker } from "@/generators/markers-generator";
 import { isImageIcon } from "@/utils/fileUtils";
 import { rn } from "@/utils/numberUtils";
@@ -70,28 +70,31 @@ function getMarkerSize({ size = 30 }: Marker, rescale: number, zoom: number): nu
   return Math.max(rn(apparentSize, 2), 1);
 }
 
+const ID_PREFIX = "marker";
+
 // world-space top-left corner, in the same convention the old renderer used — old code that reads
 // these back off the element (highlightElement()'s getBBox() fallback for an <svg> tag) keeps working
 function buildIcon(marker: Marker, size: number): L.DivIcon {
   const x = rn(marker.x - size / 2, 1);
   const y = rn(marker.y - size, 1);
-  const html = /* html */ `<svg id="marker${marker.i}" viewBox="0 0 30 30" width="${size}" height="${size}" x="${x}" y="${y}">${getMarkerContent(marker)}</svg>`;
+  const html = /* html */ `<svg id="${ID_PREFIX}${marker.i}" viewBox="0 0 30 30" width="${size}" height="${size}" x="${x}" y="${y}">${getMarkerContent(marker)}</svg>`;
   return L.divIcon({ html, className: "", iconSize: [size, size], iconAnchor: [size / 2, size] });
 }
 
+/** The marker id encoded in a rendered `<svg id="marker{i}">`, or the closest ancestor one — the one
+ *  place this id convention is defined; other files (click delegation, the editor's own click
+ *  lookup) import this instead of restating the "marker".length slice themselves */
+export function markerIdFromElement(el: Element): number | null {
+  const svg = el.closest(`svg[id^='${ID_PREFIX}']`);
+  if (!svg) return null;
+  const id = Number(svg.id.slice(ID_PREFIX.length));
+  return Number.isNaN(id) ? null : id;
+}
+
 const markers = new Map<number, L.Marker>();
-let layerGroup: L.LayerGroup | undefined;
 let visibleMarkerIds: Set<number> | null = null;
 let editedMarkerId: number | null = null;
 let editedDragEnd: ((x: number, y: number) => void) | undefined;
-
-function ensureLayerGroup(): L.LayerGroup {
-  if (!layerGroup) {
-    const pane = getFeaturePane(PANE_NAME, Z_INDEX);
-    layerGroup = L.layerGroup([], { pane: pane.id }).addTo(getLeafletMap());
-  }
-  return layerGroup;
-}
 
 export function ensurePane(): void {
   getFeaturePane(PANE_NAME, Z_INDEX);
@@ -100,13 +103,14 @@ export function ensurePane(): void {
 /** Full rebuild from pack.markers, honoring the pinned-only / id-filter / hidden rules the old
  *  renderer applied */
 export function update(allMarkers: Marker[]): void {
-  const group = ensureLayerGroup();
+  const group = getFeatureLayerGroup(PANE_NAME, Z_INDEX);
   group.clearLayers();
   markers.clear();
 
   const rescale = styles.markers.options.rescale;
   const anyPinned = allMarkers.some(m => m.pinned);
   const zoom = getLeafletMap().getZoom();
+  const paneId = getFeaturePane(PANE_NAME, Z_INDEX).id;
 
   for (const marker of allMarkers) {
     if (marker.hidden) continue;
@@ -117,7 +121,7 @@ export function update(allMarkers: Marker[]): void {
     const leafletMarker = L.marker([marker.y, marker.x], {
       icon: buildIcon(marker, size),
       draggable: isEdited,
-      pane: getFeaturePane(PANE_NAME, Z_INDEX).id
+      pane: paneId
     });
     if (isEdited) wireDrag(leafletMarker);
     markers.set(marker.i, leafletMarker);
@@ -140,7 +144,7 @@ let lastZoomSized: number | undefined;
  *  per frame: rebuilding a divIcon means replacing the marker's DOM node. Skips the rebuild
  *  entirely when the zoom level hasn't actually changed (e.g. a pure pan) */
 export function refreshSizeForZoom(): void {
-  if (!layerGroup) return;
+  if (markers.size === 0) return;
   const zoom = getLeafletMap().getZoom();
   if (zoom === lastZoomSized) return;
   lastZoomSized = zoom;
@@ -166,6 +170,6 @@ export function setEditedMarker(markerId: number | null, onDragEnd?: (x: number,
 }
 
 export function clear(): void {
-  layerGroup?.clearLayers();
+  getFeatureLayerGroup(PANE_NAME, Z_INDEX).clearLayers();
   markers.clear();
 }
