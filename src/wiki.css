@@ -7,6 +7,8 @@
   --border: #383c44;
   --accent: #4f8ef7;
   --broken: #f76e6e;
+  --success: #4ff7a0;
+  --warn: #f7c14f;
 }
 
 * {
@@ -46,6 +48,19 @@ body {
 }
 #wiki-header button {
   width: 100%;
+}
+#scenario-nav {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+#scenario-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+#scenario-nav a:hover {
+  color: var(--accent);
 }
 #live-indicator,
 #db-indicator {
@@ -128,6 +143,12 @@ body {
 }
 .summary {
   color: var(--muted);
+  font-style: italic;
+}
+.muted {
+  color: var(--muted);
+}
+.hook {
   font-style: italic;
 }
 
@@ -244,4 +265,99 @@ button {
 }
 button:hover {
   border-color: var(--accent);
+}
+
+/* Scenario module: quests, stat blocks, encounter tables, session log */
+
+.status-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.status-open {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.status-active {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.status-complete {
+  color: var(--success);
+  border-color: var(--success);
+}
+.status-abandoned {
+  color: var(--broken);
+  border-color: var(--broken);
+}
+
+.objectives ul {
+  list-style: none;
+  margin: 0.25rem 0;
+  padding: 0;
+}
+.objectives li {
+  padding: 0.15rem 0;
+}
+.objectives li.objective-done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.resolution {
+  border-left: 3px solid var(--success);
+  padding-left: 1rem;
+  margin: 0.75rem 0;
+}
+
+.stats-block table {
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+.stats-block th,
+.stats-block td {
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+}
+.stats-block th {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+#encounter-roller {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+#encounter-roller h3 {
+  margin-top: 0;
+}
+.encounter-entries {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.encounter-result {
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.session-log {
+  list-style: none;
+  padding: 0;
+}
+.session-log li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.session-log .summary {
+  margin: 0.25rem 0 0;
 }

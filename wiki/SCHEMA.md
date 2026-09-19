@@ -10,7 +10,7 @@ file changes its slug and breaks links to it, so prefer adding an alias (see bel
 ```yaml
 ---
 title: Old Port
-type: place            # place | character | faction | event | item — or any custom string
+type: place            # place | character | faction | event | item | quest | encounter-table | session-log — or any custom string
 summary: A free harbor town at the mouth of the Silt river.
 tags: [coastal, trade]
 aliases: [Oldport, The Port]   # alternate names that also resolve wikilinks to this file
@@ -89,10 +89,12 @@ entities:
   there" — destroyed, not yet founded, whatever the prose says.
 - **`eras`** is a flat map of `era-slug: {field: override-value}` — a shallow patch applied on top
   of the base frontmatter (see `resolveEntityForEra` in `src/wiki/eras.ts`). Use it for the handful
-  of fields that actually change (`summary`, a `status` field you define, `relations.ruled_by`,
-  ...), not for re-describing the whole entity. The main Markdown body is not era-scoped — write
-  its "current" description there, and use ordinary headings for an in-prose history section if
-  you want the full story in one page (`## Under the Silver Compact` / `## After the Salt War`).
+  of fields that actually change (`summary`, `status`, ...), not for re-describing the whole entity.
+  The patch is shallow at the field level: overriding `relations` replaces the *entire* map for that
+  era, not one key within it — repeat the whole block if only one relation actually changes. The
+  main Markdown body is not era-scoped — write its "current" description there, and use ordinary
+  headings for an in-prose history section if you want the full story in one page
+  (`## Under the Silver Compact` / `## After the Salt War`).
 
 The wiki app's era selector (top of the sidebar) filters the entity list to what's relevant to the
 chosen era (linked via `map_ref` there, overridden via `eras` there, or era-agnostic — no
@@ -101,7 +103,93 @@ rendering. "All eras" shows everything, unresolved. The map app's own era switch
 screen) is entirely separate — it just navigates to `?maplink=<that era's map_file>`, FMG's
 existing map-loading mechanism, so eras are also just bookmarkable/shareable links.
 
-## Wikilinks
+## Scenario module
+
+Fields for running a game or writing a structured story, layered on the same entity model above —
+not new entity kinds with their own rules, just conventional `type` values and frontmatter fields
+the app knows how to render specially. Everything here is optional and additive: a page that uses
+none of it renders exactly as before.
+
+### Stat blocks — any entity, usually `character`
+
+```yaml
+---
+title: Mira Thorne
+type: character
+statBlockSystem: D&D 5e        # free-text label, display only — the app never assumes a system
+stats:
+  hp: 58
+  ac: 15
+  attacks: Boarding cutlass +6 (1d8+3 slashing)
+---
+```
+
+`stats` is a flat `label: value` map (numbers or strings), rendered as a table on the entity page.
+There's no separate "NPC" type — a stat block is just an optional field on any entity, so a fully
+narrative character and a fight-ready NPC can both be `type: character` and cross-reference each
+other normally through `relations`/wikilinks.
+
+### Quests — `type: quest`
+
+```yaml
+---
+title: The Salt Tithe
+type: quest
+status: active                 # open | active | complete | abandoned — any other value groups under "other"
+hook: Mira Thorne corners the party at the docks with a proposition too profitable to ignore.
+objectives:
+  - "[x] Meet Mira Thorne at Old Port"
+  - "[ ] Escort the salt caravan to the delta crossing"
+resolution: How it ended — fill in once status is complete/abandoned
+relations:
+  given_by: mira-thorne
+  set_in: old-port
+---
+```
+
+`objectives` is a plain list of strings, each optionally prefixed `[x] `/`[ ] ` (done/pending) —
+rendered as a read-only checklist; edit the prefix by hand in the raw editor to check something
+off, same as any other frontmatter field. The **Quests** view (nav link in the sidebar header, or
+`#/quests`) boards every quest grouped by `status`.
+
+### Encounter tables — `type: encounter-table`
+
+```yaml
+---
+title: Delta Crossing
+type: encounter-table
+table:
+  - "3x Bandits ambush the party from the reeds"
+  - "1x A merchant caravan passes"
+  - "1x Nothing happens"
+---
+```
+
+Each entry is a plain string, optionally prefixed `Nx ` to weight it (default weight 1 — no prefix
+needed for an even table). The entity page for this type shows a **Roll** button that picks one
+entry at random, weighted accordingly (`src/wiki/scenario.ts`'s `rollEncounter`) — nothing is saved
+or persisted, it's a live dice-roll aid, re-roll as many times as you like.
+
+### Session log — `type: session-log`, one file per session
+
+```yaml
+---
+title: "Session 1: The Harbor-Master's Offer"
+type: session-log
+number: 1                      # sort order in the session log view
+date: 2026-01-05                # free-form, display only (in-fiction or real-world)
+summary: The party meets Mira Thorne and agrees to escort the salt tithe.
+relations:
+  touches: the-salt-tithe
+---
+What actually happened at the table, in prose. Link freely to the quests/characters/places
+touched, same as any other page.
+```
+
+This is distinct from **eras** (above): an era is the world's own history, one era per major
+map state; a session is what a group actually played, in real order, regardless of how much
+in-fiction time a session covers. The **Session log** view (`#/sessions`) lists every session
+sorted by `number`.
 
 `[[slug]]` or `[[slug|display text]]` anywhere in the body. Resolution is case-insensitive and
 matches against each file's slug and its `aliases`. A link that resolves nowhere still renders —

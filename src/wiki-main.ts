@@ -19,6 +19,7 @@ import { buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
 import { type Era, isEntityInEra, loadEras, resolveEntityForEra } from "@/wiki/eras";
 import { buildGraph } from "@/wiki/graph";
 import { renderMarkdown } from "@/wiki/markdown";
+import { parseObjective, parseWeightedEntry, rollEncounter } from "@/wiki/scenario";
 import {
   DEFAULT_ERA,
   type EdgeKind,
@@ -58,11 +59,18 @@ const resolveLink = (target: string) => resolveTarget(slugIndex, target);
 
 const MAP_REF_KINDS: MapRefKind[] = ["burg", "state", "province", "religion", "culture", "marker", "river"];
 
-type Route = { view: "list" } | { view: "entity"; slug: string } | { view: "new"; title: string; mapRef?: MapRef };
+type Route =
+  | { view: "list" }
+  | { view: "entity"; slug: string }
+  | { view: "new"; title: string; mapRef?: MapRef }
+  | { view: "quests" }
+  | { view: "sessions" };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
   if (hash.startsWith("entity/")) return { view: "entity", slug: decodeURIComponent(hash.slice("entity/".length)) };
+  if (hash.startsWith("quests")) return { view: "quests" };
+  if (hash.startsWith("sessions")) return { view: "sessions" };
   if (hash.startsWith("new")) {
     const params = new URLSearchParams(hash.split("?")[1] ?? "");
     const title = params.get("title") ?? "";
@@ -202,6 +210,64 @@ function renderRelations(relations: Record<string, string> | undefined): string 
   return `<section class="relations"><h3>Relations</h3><ul>${items}</ul></section>`;
 }
 
+const QUEST_STATUSES = ["open", "active", "complete", "abandoned"];
+
+/** A quest's status as a colored pill in the header — any value outside the documented set still
+ *  renders, just without a dedicated color (falls back to the plain badge style) */
+function renderStatusBadge(status: string | undefined): string {
+  if (!status) return "";
+  const known = QUEST_STATUSES.includes(status) ? status : "other";
+  return `<span class="status-badge status-${known}">${status}</span>`;
+}
+
+/** A generic key/value table — works for any game system, since the app never assumes what a
+ *  stat's key means (see WikiFrontmatter.statBlockSystem, display-only) */
+function renderStatsBlock(stats: Record<string, string | number> | undefined, system: string | undefined): string {
+  if (!stats || !Object.keys(stats).length) return "";
+  const rows = Object.entries(stats)
+    .map(([key, value]) => `<tr><th>${key}</th><td>${value}</td></tr>`)
+    .join("");
+  return `<section class="stats-block"><h3>Stats${system ? ` <span class="muted">(${system})</span>` : ""}</h3><table>${rows}</table></section>`;
+}
+
+/** Read-only checklist for a quest's objectives — editing an objective's done state still goes
+ *  through the raw textarea editor, same as every other frontmatter field in this app */
+function renderObjectives(objectives: string[] | undefined): string {
+  if (!objectives?.length) return "";
+  const items = objectives
+    .map(parseObjective)
+    .map(({ text, done }) => `<li class="${done ? "objective-done" : ""}">${done ? "☑" : "☐"} ${text}</li>`)
+    .join("");
+  return `<section class="objectives"><h3>Objectives</h3><ul>${items}</ul></section>`;
+}
+
+/** The wiki app's first stateful/interactive (non-editing) widget — rolls a weighted pick from an
+ *  encounter table on demand. Owns its result in a closure and re-renders only its own container,
+ *  never the route/URL. See scenario.ts's rollEncounter/parseWeightedEntry */
+function mountEncounterRoller(container: HTMLElement, table: string[]): void {
+  const entries = table.map(parseWeightedEntry);
+  const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
+
+  function draw(): void {
+    const result = rollEncounter(table);
+    container.innerHTML = `
+      <h3>Encounter table</h3>
+      <ul class="encounter-entries">
+        ${entries.map(entry => `<li>${entry.weight}× ${entry.text}</li>`).join("")}
+      </ul>
+      <button id="encounter-roll-btn" type="button">Roll</button>
+      ${result ? `<p class="encounter-result">🎲 ${result.text}</p>` : ""}
+    `;
+    container.querySelector<HTMLButtonElement>("#encounter-roll-btn")?.addEventListener("click", draw);
+  }
+
+  if (!table.length || !totalWeight) {
+    container.innerHTML = `<h3>Encounter table</h3><p class="muted">No entries yet — add some to the "table" list.</p>`;
+    return;
+  }
+  draw();
+}
+
 /** FMG's `?burg=<id>` / `?cell=<id>` URL params already focus the map — see docs/wiki/URL-parameters.md */
 function mapViewHref(mapRef: MapRef | undefined): string | undefined {
   if (!mapRef) return undefined;
@@ -234,27 +300,36 @@ function renderEntityView(slug: string): void {
   const mapHref = mapViewHref(resolved.mapRef);
   const dbRef = dbRefOf(entity);
 
+  const isEncounterTable = frontmatter.type === "encounter-table" && (frontmatter.table?.length ?? 0) > 0;
+
   content.innerHTML = `
     <header class="entity-header">
       <h1>${frontmatter.title}</h1>
       <div class="entity-meta">
         <span class="type-badge">${frontmatter.type}</span>
+        ${renderStatusBadge(frontmatter.status)}
         ${dbRef ? `<span class="map-ref-badge">from map #${dbRef.mapId}</span>` : ""}
         ${mapRefBadge}
         ${tags}
       </div>
       ${frontmatter.summary ? `<p class="summary">${frontmatter.summary}</p>` : ""}
+      ${frontmatter.hook ? `<p class="hook">${frontmatter.hook}</p>` : ""}
       <div class="entity-actions">
         ${mapHref ? `<a href="${mapHref}" target="_blank" rel="noopener">View on map ↗</a>` : ""}
         ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
         ${dbRef ? `<a href="#/new?title=${encodeURIComponent(frontmatter.title)}">Write a lore page for this ↗</a>` : ""}
       </div>
     </header>
+    ${renderObjectives(frontmatter.objectives)}
+    ${frontmatter.resolution ? `<section class="resolution"><h3>Resolution</h3><p>${frontmatter.resolution}</p></section>` : ""}
+    ${renderStatsBlock(frontmatter.stats, frontmatter.statBlockSystem)}
+    ${isEncounterTable ? `<section id="encounter-roller"></section>` : ""}
     ${renderRelations(frontmatter.relations)}
     <article class="entity-body">${renderMarkdown(entity.body, resolveLink)}</article>
   `;
 
   el<HTMLButtonElement>("edit-btn")?.addEventListener("click", () => renderEditorView(slug));
+  if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
 }
 
 function escapeForTextarea(text: string): string {
@@ -312,6 +387,9 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
         <option value="faction">faction</option>
         <option value="event">event</option>
         <option value="item">item</option>
+        <option value="quest">quest</option>
+        <option value="encounter-table">encounter-table</option>
+        <option value="session-log">session-log</option>
       </select>
     </label>
     <button id="create-btn" type="button">Create page</button>
@@ -333,12 +411,86 @@ function renderHomeView(): void {
   `;
 }
 
+function visibleEntitiesOfType(type: string): WikiEntity[] {
+  return entities.filter(
+    entity => entity.frontmatter.type === type && (!activeEra || isEntityInEra(entity, activeEra))
+  );
+}
+
+function entityLink(entity: WikiEntity): string {
+  return `<a href="#/entity/${encodeURIComponent(entity.slug)}">${entity.frontmatter.title}</a>`;
+}
+
+/** Quests grouped by status, in a fixed reading order (not alphabetical) — unrecognized status
+ *  values still show up, grouped under "other" rather than being dropped */
+function renderQuestBoardView(): void {
+  const quests = visibleEntitiesOfType("quest");
+  const groups = new Map<string, WikiEntity[]>();
+  for (const quest of quests) {
+    const status =
+      quest.frontmatter.status && QUEST_STATUSES.includes(quest.frontmatter.status)
+        ? quest.frontmatter.status
+        : "other";
+    const group = groups.get(status) ?? [];
+    group.push(quest);
+    groups.set(status, group);
+  }
+
+  const order = [...QUEST_STATUSES, "other"];
+  const sections = order
+    .filter(status => groups.has(status))
+    .map(status => {
+      const items = groups
+        .get(status)!
+        .map(
+          quest =>
+            `<li>${entityLink(quest)}${quest.frontmatter.hook ? ` — <span class="muted">${quest.frontmatter.hook}</span>` : ""}</li>`
+        )
+        .join("");
+      return `<div class="entity-group"><h2>${status}</h2><ul>${items}</ul></div>`;
+    })
+    .join("");
+
+  el<HTMLElement>("content").innerHTML = `
+    <h1>Quests</h1>
+    ${quests.length ? sections : `<p class="muted">No quests yet — create one via "${entities.length ? "New" : "Open a wiki folder, then New"}".</p>`}
+  `;
+}
+
+/** Session log, chronological by `number` (entities without one sort last, by title) */
+function renderSessionLogView(): void {
+  const sessions = visibleEntitiesOfType("session-log").sort((a, b) => {
+    const an = a.frontmatter.number;
+    const bn = b.frontmatter.number;
+    if (an !== undefined && bn !== undefined) return an - bn;
+    if (an !== undefined) return -1;
+    if (bn !== undefined) return 1;
+    return a.frontmatter.title.localeCompare(b.frontmatter.title);
+  });
+
+  const items = sessions
+    .map(session => {
+      const number = session.frontmatter.number !== undefined ? `#${session.frontmatter.number} — ` : "";
+      const date = session.frontmatter.date ? ` <span class="muted">(${session.frontmatter.date})</span>` : "";
+      const summary = session.frontmatter.summary ? `<p class="summary">${session.frontmatter.summary}</p>` : "";
+      return `<li>${number}${entityLink(session)}${date}${summary}</li>`;
+    })
+    .join("");
+
+  el<HTMLElement>("content").innerHTML = `
+    <h1>Session log</h1>
+    ${sessions.length ? `<ul class="session-log">${items}</ul>` : `<p class="muted">No sessions logged yet.</p>`}
+  `;
+}
+
 function render(): void {
   const route = currentRoute();
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
   if (route.view === "entity") renderEntityView(route.slug);
   else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
+  else if (route.view === "quests") renderQuestBoardView();
+  else if (route.view === "sessions") renderSessionLogView();
   else renderHomeView();
 }
 
@@ -358,7 +510,10 @@ const TYPE_COLORS: Record<string, string> = {
   faction: "#f7c14f",
   event: "#8a4ff7",
   item: "#4ff7b8",
-  era: "#f7f04f"
+  era: "#f7f04f",
+  quest: "#f78a4f",
+  "encounter-table": "#4ff7e0",
+  "session-log": "#a5a5f7"
 };
 
 function renderGraph(): void {

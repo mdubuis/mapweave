@@ -70,6 +70,15 @@ function slugify(title: string): string {
   return slug || "untitled";
 }
 
+/** Type-specific starter frontmatter for the scenario module — a fresh page already shows the
+ *  expected shape instead of a bare title/type stub. See wiki/SCHEMA.md */
+function scenarioTemplateBlock(type: string): string {
+  if (type === "quest") return "status: open\nobjectives:\n  - [ ] \n";
+  if (type === "encounter-table") return "table:\n  - \n";
+  if (type === "session-log") return "number: 1\ndate: \n";
+  return "";
+}
+
 export async function createEntity(
   dir: FileSystemDirectoryHandle,
   title: string,
@@ -85,6 +94,6 @@ export async function createEntity(
         mapRef.cell !== undefined ? `    cell: ${mapRef.cell}\n` : ""
       }`
     : "";
-  await saveEntity(handle, `---\ntitle: ${title}\ntype: ${type}\n${mapRefBlock}---\n\n`);
+  await saveEntity(handle, `---\ntitle: ${title}\ntype: ${type}\n${mapRefBlock}${scenarioTemplateBlock(type)}---\n\n`);
   return { slug };
 }

@@ -31,6 +31,53 @@ describe("parseEntityFile", () => {
     const entity = parseEntityFile("wiki/x.md", raw);
     expect(entity.frontmatter.eras).toEqual({ "post-war": { summary: "A besieged ruin." } });
   });
+
+  it("parses scenario module fields: quest status/hook/objectives/resolution", () => {
+    const raw = [
+      "---",
+      "status: active",
+      "hook: A merchant offers gold for safe passage.",
+      "objectives:",
+      "  - [x] Find the map",
+      "  - [ ] Talk to Mira",
+      "resolution: The party escorted the caravan safely.",
+      "---"
+    ].join("\n");
+    const entity = parseEntityFile("wiki/quests/x.md", raw);
+    expect(entity.frontmatter.status).toBe("active");
+    expect(entity.frontmatter.hook).toBe("A merchant offers gold for safe passage.");
+    expect(entity.frontmatter.objectives).toEqual(["[x] Find the map", "[ ] Talk to Mira"]);
+    expect(entity.frontmatter.resolution).toBe("The party escorted the caravan safely.");
+  });
+
+  it("parses a stat block, dropping any non-string/number value rather than the whole block", () => {
+    const raw = ["---", "statBlockSystem: D&D 5e", "stats:", "  hp: 10", "  ac: 14", "  name: Mira", "---"].join("\n");
+    const entity = parseEntityFile("wiki/characters/x.md", raw);
+    expect(entity.frontmatter.statBlockSystem).toBe("D&D 5e");
+    expect(entity.frontmatter.stats).toEqual({ hp: 10, ac: 14, name: "Mira" });
+  });
+
+  it("drops the stats block entirely once every non-scalar entry is filtered out", () => {
+    const raw = ["---", "stats:", "  weapons:", "    - sword", "    - shield", "---"].join("\n");
+    const entity = parseEntityFile("wiki/x.md", raw);
+    expect(entity.frontmatter.stats).toBeUndefined();
+  });
+
+  it("parses an encounter table and session-log fields", () => {
+    const raw = [
+      "---",
+      "table:",
+      "  - 3x Bandits ambush the party",
+      "  - 1x A merchant caravan passes",
+      "number: 3",
+      "date: 2026-01-05",
+      "---"
+    ].join("\n");
+    const entity = parseEntityFile("wiki/x.md", raw);
+    expect(entity.frontmatter.table).toEqual(["3x Bandits ambush the party", "1x A merchant caravan passes"]);
+    expect(entity.frontmatter.number).toBe(3);
+    expect(entity.frontmatter.date).toBe("2026-01-05");
+  });
 });
 
 describe("normalizeKey", () => {

@@ -62,6 +62,17 @@ function toRelations(value: unknown): Record<string, string> | undefined {
   return result;
 }
 
+/** A stat block is a flat map of label -> string|number; anything else per key is dropped rather
+ *  than rejecting the whole block (see wiki/SCHEMA.md's scenario module section) */
+function toStats(value: unknown): Record<string, string | number> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const result: Record<string, string | number> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof val === "string" || typeof val === "number") result[key] = val;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
 function toFrontmatter(slug: string, data: Record<string, unknown>): WikiFrontmatter {
   return {
     ...data,
@@ -74,7 +85,16 @@ function toFrontmatter(slug: string, data: Record<string, unknown>): WikiFrontma
     map_ref: toMapRefsByEra(data.map_ref),
     eras: toEraOverrides(data.eras),
     order: typeof data.order === "number" ? data.order : undefined,
-    map_file: typeof data.map_file === "string" ? data.map_file : undefined
+    map_file: typeof data.map_file === "string" ? data.map_file : undefined,
+    status: typeof data.status === "string" ? data.status : undefined,
+    hook: typeof data.hook === "string" ? data.hook : undefined,
+    objectives: toStringArray(data.objectives),
+    resolution: typeof data.resolution === "string" ? data.resolution : undefined,
+    stats: toStats(data.stats),
+    statBlockSystem: typeof data.statBlockSystem === "string" ? data.statBlockSystem : undefined,
+    table: toStringArray(data.table),
+    number: typeof data.number === "number" ? data.number : undefined,
+    date: typeof data.date === "string" ? data.date : undefined
   };
 }
 

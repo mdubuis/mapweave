@@ -6,6 +6,12 @@ tags: [captain, delta]
 relations:
   located_in: old-port
   member_of: silver-compact
+statBlockSystem: D&D 5e
+stats:
+  hp: 58
+  ac: 15
+  attacks: Boarding cutlass +6 (1d8+3 slashing)
+  notes: Never fights fair; will call for harbor guards within 2 rounds
 ---
 
 Mira Thorne runs the harbor at [[Old Port]] the way some rulers run a kingdom: through fees,

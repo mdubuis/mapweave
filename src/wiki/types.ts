@@ -30,6 +30,29 @@ export interface WikiFrontmatter {
   order?: number;
   /** "era"-type entities only: filename under public/maps/ for this era's full map snapshot */
   map_file?: string;
+
+  // Scenario module — usable on any entity, not gated to a specific `type`. See wiki/SCHEMA.md.
+  /** Free-form convention (open/active/complete/abandoned are the documented ones); any other
+   *  value is accepted and grouped under "other" rather than rejected */
+  status?: string;
+  /** Narrative hook, typically used on quest entities */
+  hook?: string;
+  /** Each entry optionally prefixed "[x] "/"[ ] " to mark done/pending — see scenario.ts's parseObjective */
+  objectives?: string[];
+  /** How a quest concluded, filled in once status is "complete"/"abandoned" */
+  resolution?: string;
+  /** Generic key/value stat block, usable on any entity (most often `character`) — the app never
+   *  assumes a specific game system, see statBlockSystem */
+  stats?: Record<string, string | number>;
+  /** Free-form label for what `stats`' keys mean, e.g. "D&D 5e" or "maison" — display only */
+  statBlockSystem?: string;
+  /** Encounter/event table entries. Each entry optionally prefixed "Nx " to weight it (default 1)
+   *  — see scenario.ts's parseWeightedEntry/rollEncounter */
+  table?: string[];
+  /** Session-log entities: sort order for the session log view */
+  number?: number;
+  /** Session-log entities: free-form date string (in-fiction or real-world), display only */
+  date?: string;
   [key: string]: unknown;
 }
 
