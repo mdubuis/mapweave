@@ -27,6 +27,12 @@ const PANE_NAME = "burg-icons-leaflet";
 const Z_INDEX = 108;
 const GROUP_ORDER_SCALE = 1000;
 
+/** Matches any rendered burg or anchor icon's wrapper <svg> (id="burg{i}"/"anchor{i}", data-id="{i}"
+ *  on both) — the one place this id/data-attribute convention is defined; every other file that
+ *  needs to find a rendered burg icon (hover tooltips, table<->map highlighting, label-spread's
+ *  bounds lookup) imports this instead of restating the selector */
+export const BURG_ICON_SELECTOR = "svg[id^='burg'][data-id], svg[id^='anchor'][data-id]";
+
 type BurgIconAttrs = Record<string, string | number | boolean | null | undefined>;
 
 function buildIcon(

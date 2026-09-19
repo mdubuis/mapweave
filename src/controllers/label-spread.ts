@@ -7,6 +7,7 @@ import { getGroupStyle, writeGroupStyle } from "@/renderers/labels/label-groups"
 import { createLabelElements } from "@/renderers/labels/label-markup";
 import type { LabelData } from "@/renderers/labels/labels";
 import { getVisibleLabels } from "@/renderers/labels/labels-renderer";
+import { BURG_ICON_SELECTOR } from "@/renderers/leaflet/burg-icon-layer";
 import type { Point } from "@/types/global";
 
 type PathLabelType = Extract<LabelType, "river" | "route">;
@@ -359,7 +360,7 @@ function getDisplayedBurgIconBounds(): Map<number, LabelBounds> {
   // burg icons render as <svg id="burg{i}"|"anchor{i}" data-id="{i}"> inside a Leaflet divIcon (see
   // burg-icon-layer.ts) — walk the whole document rather than a container id, since each icon is its
   // own top-level element under a Leaflet pane, not a child of one shared #burgIcons/#anchors group
-  const icons = document.querySelectorAll<SVGGraphicsElement>("svg[id^='burg'][data-id], svg[id^='anchor'][data-id]");
+  const icons = document.querySelectorAll<SVGGraphicsElement>(BURG_ICON_SELECTOR);
   for (const icon of icons) {
     const id = Number(icon.dataset.id);
     const rect = icon.getBoundingClientRect();

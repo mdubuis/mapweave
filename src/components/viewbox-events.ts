@@ -44,8 +44,10 @@ export function applyDefaultViewboxEvents(): void {
 // map group id -> editor to open. The click target is resolved by walking up its ancestors
 type Opener = (target: SVGElement, parent: SVGElement) => void;
 
+// rivers/routes/markers/burgIcons dropped from these tables: those ids no longer exist anywhere in
+// the legacy DOM tree (see PANE_EDITORS below, which now resolves their clicks) — an ancestor-walk
+// can never match them again, so a leftover entry here would just be misleading dead code
 const PARENT_EDITORS: Record<string, Opener> = {
-  rivers: target => Controllers.RiverEditor.open(target.id),
   ice: target => Controllers.IceEditor.open(target),
   terrain: target => Controllers.ReliefEditor.open(target),
   goodsCells: () => Controllers.GoodsEditor.open()
@@ -53,10 +55,7 @@ const PARENT_EDITORS: Record<string, Opener> = {
 
 const GRAND_EDITORS: Record<string, Opener> = {
   emblems: target => Controllers.EmblemsEditor.open(undefined, undefined, undefined, target),
-  routes: target => Controllers.RouteEditor.open(target.id),
-  burgIcons: target => Controllers.BurgEditor.open(Number(target.dataset.id)),
   journeys: (_target, parent) => Controllers.JourneyEditor.open(Number(parent.id.replace("journey", ""))),
-  markers: target => Controllers.MarkersEditor.open(undefined, target),
   ruler: () => Controllers.MeasurersEditor.open(),
   goodsIcons: () => Controllers.GoodsEditor.open(),
   goodsBurgs: (_target, parent) => Controllers.ProductionOverview.open(Number(parent.dataset.id)),
@@ -68,7 +67,6 @@ const GRAND_EDITORS: Record<string, Opener> = {
 };
 
 const GREAT_EDITORS: Record<string, Opener> = {
-  markers: target => Controllers.MarkersEditor.open(undefined, target),
   ruler: () => Controllers.MeasurersEditor.open(),
   armies: (_target, parent) => Controllers.RegimentEditor.open(`#${parent.id}`)
 };

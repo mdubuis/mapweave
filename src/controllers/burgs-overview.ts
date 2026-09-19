@@ -16,6 +16,7 @@ import { tip } from "@/components/tooltips";
 import { Controllers } from "@/controllers";
 import type { Burg } from "@/generators/burgs-generator";
 import { removeEmblem } from "@/renderers/draw-emblems";
+import { BURG_ICON_SELECTOR } from "@/renderers/leaflet/burg-icon-layer";
 import { downloadFile, getFileName, getHeight, getLatitude, getLongitude, uploadFile } from "@/utils";
 import { convertTemperature, ensureEl, getTemperatureLikeness, rn, si } from "../utils";
 
@@ -205,9 +206,7 @@ function renderDialog(): void {
   applyLineHighlighting(dialogId, ({ target, cellId }) => {
     const burgId = pack.cells.burg[cellId];
     if (burgId) return burgId;
-    const burg = target.closest<SVGElement>(
-      "#labels [data-label-type='burg'][data-id], svg[id^='burg'][data-id], svg[id^='anchor'][data-id]"
-    );
+    const burg = target.closest<SVGElement>(`#labels [data-label-type='burg'][data-id], ${BURG_ICON_SELECTOR}`);
     return burg ? Number(burg.dataset.id) : undefined;
   });
 

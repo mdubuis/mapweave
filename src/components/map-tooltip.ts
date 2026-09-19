@@ -1,6 +1,7 @@
 import { select } from "d3";
 import { Layers } from "@/components/layers";
 import { Notes } from "@/generators/notes";
+import { BURG_ICON_SELECTOR } from "@/renderers/leaflet/burg-icon-layer";
 import { highlightEmblemElement } from "@/renderers/overlays/highlight";
 import type { Point } from "@/types/global";
 import {
@@ -40,9 +41,7 @@ export function showNotes(event: Event): void {
   const parent = target.parentNode as HTMLElement;
   const grand = parent?.parentNode as HTMLElement;
 
-  const burg = target.closest<HTMLElement>(
-    "[data-label-type='burg'][data-id], svg[id^='burg'][data-id], svg[id^='anchor'][data-id]"
-  );
+  const burg = target.closest<HTMLElement>(`[data-label-type='burg'][data-id], ${BURG_ICON_SELECTOR}`);
   // lakes and coastlines are drawn as <use> of a shared path, so they carry the feature in a data attribute
   const feature = target.closest<HTMLElement>("#lakes [data-f], #coastline [data-f]");
   const id = burg
@@ -119,9 +118,7 @@ interface TipContext {
  */
 function getElementTip({ group, subgroup, target, event, path, cellId }: TipContext): string | undefined {
   const parent = target.parentNode as SVGElement;
-  const burgElement = target.closest<SVGElement>(
-    "[data-label-type='burg'][data-id], svg[id^='burg'][data-id], svg[id^='anchor'][data-id]"
-  );
+  const burgElement = target.closest<SVGElement>(`[data-label-type='burg'][data-id], ${BURG_ICON_SELECTOR}`);
   if (burgElement) {
     const burgId = Number(burgElement.dataset.id);
     const burg = pack.burgs[burgId];
