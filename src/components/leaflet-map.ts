@@ -7,10 +7,21 @@ import "leaflet/dist/leaflet.css";
  * The zoom range here is a linear scale factor (matches the app's existing [1, 20] `viewport.scale`),
  * not Leaflet's default power-of-two tile zoom. Overriding `scale`/`zoom` on CRS.Simple keeps
  * `map.getZoom()` numerically equal to that scale factor everywhere else in the app reads it.
+ *
+ * `transformation` also has to be overridden, not just inherited from CRS.Simple: its default
+ * (`new L.Transformation(1, 0, -1, 0)`) flips the y axis, because CRS.Simple assumes a "y increases
+ * upward" convention. This app's world data (pack.cells.p / grid.points, and #viewbox's own manual
+ * translate/scale transform for the still-legacy layers) uses the opposite, ordinary screen/SVG
+ * convention — y increases downward. Left at the default, every Leaflet-rendered layer (GeoJSON
+ * paths, L.marker positions) renders vertically mirrored relative to #viewbox's legacy content and
+ * to the actual pack coordinates — confirmed empirically, not theoretical; see leaflet-map.test.ts.
+ * `(1, 0, 1, 0)` is a true identity transform (x=lng, y=lat, no flip), matching the y-down convention
+ * everywhere else in the app already assumes.
  */
 export const LinearSimpleCRS = L.extend({}, L.CRS.Simple, {
   scale: (zoom: number) => zoom,
-  zoom: (scale: number) => scale
+  zoom: (scale: number) => scale,
+  transformation: new L.Transformation(1, 0, 1, 0)
 });
 
 let map: L.Map | undefined;

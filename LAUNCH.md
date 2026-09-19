@@ -148,6 +148,14 @@ been rebuilt on a second, independent Leaflet map instance. Everything else (the
 the old code, unconverted. There's no visible UI difference to look for beyond those — the useful
 check is that nothing *regressed*:
 
+**Check this first, before anything else in this section**: open any map and confirm biomes/states/
+provinces/religions/cultures/rivers/routes/markers/burg icons line up correctly with the coastline,
+labels, and borders — not just that something renders, but that it renders in the *right place*. A
+severe bug (every Leaflet-rendered layer rendering vertically mirrored relative to everything else)
+was found via code review and fixed just before this doc update, but it was never confirmed against
+a real browser — see `MIGRATION.md`'s Phase 5 section for the full writeup. If this looks wrong,
+nothing else below matters until it's fixed.
+
 - Drag to pan, scroll/pinch to zoom, double-click to zoom in — should feel the same as before.
 - `F2` / the "new map" button, the heightmap gallery, and `?seed=`/`?maplink=` URLs should all still
   load and center correctly.

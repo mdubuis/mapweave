@@ -4,7 +4,7 @@ import { collectBiomeStatistics, createCustomBiome, removeCustomBiome } from "./
 
 // This file never touches map rendering; the mock only keeps the real "leaflet" package (which
 // probes document.documentElement.style at import time) from loading under the minimal DOM stub
-vi.mock("leaflet", () => ({ extend: Object.assign, CRS: { Simple: {} } }));
+vi.mock("leaflet", () => ({ extend: Object.assign, CRS: { Simple: {} }, Transformation: class {} }));
 
 const createBiome = (i: number): Biome => ({
   i,
