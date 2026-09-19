@@ -1,8 +1,9 @@
 /**
  * "Wiki" entry point built into the map layer itself: a floating button that slides in the wiki
- * app (wiki.html) as an in-page panel, so browsing/editing lore never requires leaving the map or
- * knowing to swap the URL by hand. Pure JS injection, same approach as era-switcher.ts — no
- * index.html edits, and the iframe only loads wiki.html (a separate bundle) on first open.
+ * app (index.html — the wiki is the app's landing page, see MAPWEAVE.md) as an in-page panel, so
+ * browsing/editing lore never requires leaving the map or knowing to swap the URL by hand. Pure JS
+ * injection, same approach as era-switcher.ts — no map.html edits, and the iframe only loads
+ * index.html (a separate bundle) on first open.
  */
 
 import { showDataTip } from "@/components/tooltips";
@@ -116,7 +117,7 @@ export function initWikiPanel(): void {
 
   function open(): void {
     if (!loaded) {
-      frame.src = "./wiki.html";
+      frame.src = "./index.html";
       loaded = true;
     }
     panel.classList.add("open");

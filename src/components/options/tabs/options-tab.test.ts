@@ -37,7 +37,7 @@ const edit = (input: HTMLInputElement, value: string, event = "input") => {
 
 beforeAll(async () => {
   vi.useFakeTimers();
-  const html = readFileSync("src/index.html", "utf8");
+  const html = readFileSync("src/map.html", "utf8");
   document.body.innerHTML = new DOMParser().parseFromString(html, "text/html").body.innerHTML;
   document.body.insertAdjacentHTML("beforeend", '<div id="viewMode"></div>');
   vi.stubGlobal("$", () => ({ draggable: vi.fn(), disableSelection: vi.fn() }));

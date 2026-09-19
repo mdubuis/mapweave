@@ -144,7 +144,7 @@ function initTourPromptButton(): void {
   localStorage.setItem(STORAGE_KEY, String(count + 1));
 }
 
-/** The app is a static site, but it fetches assets: opening index.html from disk cannot work */
+/** The app is a static site, but it fetches assets: opening map.html from disk cannot work */
 export function warnIfServerless(): boolean {
   if (location.hostname) return false;
 

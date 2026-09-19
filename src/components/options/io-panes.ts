@@ -229,7 +229,7 @@ initialize();
 
 export { showExportPane, showLoadPane, showSavePane };
 
-// Legacy seam: the save/load/export dialogs still live in index.html and wire these inline
+// Legacy seam: the save/load/export dialogs still live in map.html and wire these inline
 declare global {
   interface Window {
     connectToDropbox: typeof connectToDropbox;

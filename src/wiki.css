@@ -70,7 +70,6 @@ body {
   margin-top: 0.25rem;
 }
 
-#search,
 #era-select {
   width: 100%;
   padding: 0.4rem;
@@ -78,6 +77,32 @@ body {
   border: 1px solid var(--border);
   color: var(--fg);
   border-radius: 4px;
+}
+
+#new-page-btn {
+  width: 100%;
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+#search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+#search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+}
+#search-count {
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 .entity-group h2 {
@@ -117,6 +142,11 @@ body {
   max-width: 60rem;
 }
 
+.entity-header h1 {
+  font-size: 2rem;
+  margin: 0 0 0.3rem;
+  line-height: 1.2;
+}
 .entity-meta {
   display: flex;
   gap: 0.4rem;
@@ -156,6 +186,28 @@ body {
   padding-left: 1.2rem;
 }
 
+/* Reading measure and typography deliberately distinct from the wider #content well (60rem) that
+   other views — the quest board, tables — still use: long-form prose reads best around 65-75
+   characters per line, not stretched to the full content width. */
+.entity-body {
+  max-width: 42rem;
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+.entity-body h1,
+.entity-body h2,
+.entity-body h3 {
+  font-family: system-ui, sans-serif;
+  line-height: 1.3;
+  margin: 1.4em 0 0.5em;
+}
+.entity-body > :first-child {
+  margin-top: 0;
+}
+.entity-body p {
+  margin: 0.9em 0;
+}
 .entity-body a.wiki-link {
   color: var(--accent);
   text-decoration: none;
@@ -176,11 +228,14 @@ body {
   padding: 0.75rem;
   border-radius: 6px;
   overflow-x: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
 }
 .entity-body code {
   background: var(--bg-alt);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
+  font-family: ui-monospace, monospace;
 }
 .entity-body blockquote {
   border-left: 3px solid var(--border);
@@ -189,19 +244,58 @@ body {
   color: var(--muted);
 }
 
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.editor-toolbar .preview-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+}
+
+#editor-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+#editor-split.preview-hidden {
+  grid-template-columns: 1fr;
+}
+#editor-split.preview-hidden #editor-preview {
+  display: none;
+}
+
 #editor-textarea {
   width: 100%;
-  height: 60vh;
+  height: 70vh;
   background: var(--bg-alt);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 0.75rem;
+  padding: 1rem;
   font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  resize: vertical;
 }
+#editor-preview {
+  height: 70vh;
+  overflow-y: auto;
+  padding: 1rem;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-width: none; /* .entity-body's reading-measure cap doesn't apply inside this fixed-width pane */
+}
+
 .editor-actions {
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
   display: flex;
   gap: 0.5rem;
 }

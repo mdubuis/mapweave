@@ -1,8 +1,9 @@
 /**
- * Bridges a clicked map entity (burg/state/marker) to its Mapweave wiki page. The map app (index.html)
- * and the wiki app (wiki.html) are separate bundles with no shared runtime, so this reads the same
- * bundled `wiki/**\/*.md` snapshot the wiki app browses (see src/wiki/entities.ts) — live edits made
- * through the wiki's "Open wiki folder" editor aren't visible here until the page is rebuilt/reloaded.
+ * Bridges a clicked map entity (burg/state/marker) to its Mapweave wiki page. The map app (map.html)
+ * and the wiki app (index.html — the wiki is the app's landing page, see MAPWEAVE.md) are separate
+ * bundles with no shared runtime, so this reads the same bundled `wiki/**\/*.md` snapshot the wiki
+ * app browses (see src/wiki/entities.ts) — live edits made through the wiki's "Open wiki folder"
+ * editor aren't visible here until the page is rebuilt/reloaded.
  *
  * Every lookup is era-scoped: the same burg id can point at a different (or no) wiki page from one
  * era's map to the next, since map_ref itself is keyed by era — see wiki/SCHEMA.md and src/wiki/eras.ts.
@@ -34,7 +35,7 @@ export function findWikiEntitySlug(era: string, identity: Pick<MapEntityIdentity
 }
 
 /** Existing page if this entity is already linked in this era, otherwise a prefilled "create page" flow */
-export function wikiLinkHref(era: string, identity: MapEntityIdentity, wikiBase = "./wiki.html"): string {
+export function wikiLinkHref(era: string, identity: MapEntityIdentity, wikiBase = "./index.html"): string {
   const slug = findWikiEntitySlug(era, identity);
   if (slug) return `${wikiBase}#/entity/${encodeURIComponent(slug)}`;
 

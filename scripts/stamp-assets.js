@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Stamp the public/ assets that src/index.html references with a hash of their contents.
+ * Stamp the public/ assets that src/map.html references with a hash of their contents.
  *
  * Those files are served from a fixed path and the service worker holds scripts and styles for
  * 30 days, so the ?v= query is the only thing that tells a returning visitor to refetch one.
@@ -15,7 +15,7 @@
  * Usage:
  *   node scripts/stamp-assets.js           # rewrite the stale stamps
  *   node scripts/stamp-assets.js --check   # exit 1 if any stamp is stale, write nothing
- *   node scripts/stamp-assets.js --stage   # rewrite, then git add src/index.html
+ *   node scripts/stamp-assets.js --stage   # rewrite, then git add src/map.html
  */
 
 const fs = require("fs");
@@ -24,10 +24,10 @@ const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
-const indexHtmlPath = path.join(repoRoot, "src", "index.html");
+const mapHtmlPath = path.join(repoRoot, "src", "map.html");
 const publicRoot = path.join(repoRoot, "public");
 
-/** Only ever matches a path that already carries a stamp, so index.html's SVG data is untouched */
+/** Only ever matches a path that already carries a stamp, so map.html's SVG data is untouched */
 const STAMPED_ASSET = /([\w./-]+\.(?:js|css))\?v=([\w.]+)/g;
 
 const HASH_LENGTH = 8;
@@ -36,7 +36,7 @@ function hashFile(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex").slice(0, HASH_LENGTH);
 }
 
-/** One entry per ?v= reference in index.html, whether or not it is stale */
+/** One entry per ?v= reference in map.html, whether or not it is stale */
 function collectStamps(html) {
   const stamps = [];
 
@@ -57,12 +57,12 @@ function main() {
   const check = args.includes("--check");
   const stage = args.includes("--stage");
 
-  const html = fs.readFileSync(indexHtmlPath, "utf8");
+  const html = fs.readFileSync(mapHtmlPath, "utf8");
   const stamps = collectStamps(html);
 
   const missing = stamps.filter(({ missing }) => missing);
   for (const { assetPath } of missing) {
-    console.error(`[stamp-assets] src/index.html references public/${assetPath}, which does not exist`);
+    console.error(`[stamp-assets] src/map.html references public/${assetPath}, which does not exist`);
   }
 
   const stale = stamps.filter(({ missing, stamp, hash }) => !missing && stamp !== hash);
@@ -74,7 +74,7 @@ function main() {
   }
 
   if (check) {
-    console.error("\n[stamp-assets] src/index.html is serving stale stamps for:\n");
+    console.error("\n[stamp-assets] src/map.html is serving stale stamps for:\n");
     for (const { assetPath, stamp, hash } of stale) console.error(`  ${assetPath}  ${stamp}  →  ${hash}`);
     console.error("\nRun `npm run stamp-assets` to refresh them.\n");
     process.exit(1);
@@ -85,10 +85,10 @@ function main() {
     updated = updated.split(`${assetPath}?v=${stamp}`).join(`${assetPath}?v=${hash}`);
     console.log(`[stamp-assets] ${assetPath}  ${stamp}  →  ${hash}`);
   }
-  fs.writeFileSync(indexHtmlPath, updated, "utf8");
+  fs.writeFileSync(mapHtmlPath, updated, "utf8");
 
   if (missing.length) process.exit(1);
-  if (stage) execFileSync("git", ["add", "--", indexHtmlPath], { stdio: "inherit" });
+  if (stage) execFileSync("git", ["add", "--", mapHtmlPath], { stdio: "inherit" });
 }
 
 try {

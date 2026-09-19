@@ -3,7 +3,7 @@
 // capital, fort, ...) and, for port burgs, a second "anchor" glyph drawn at the same point. See
 // MIGRATION.md Phase 5.
 //
-// Sizing/positioning trick, preserved from the old renderer: every symbol in index.html's <defs> is
+// Sizing/positioning trick, preserved from the old renderer: every symbol in map.html's <defs> is
 // authored centered on its own local (0,0) (e.g. <circle cx="0" cy="0" r="5"/>), and a plain
 // `<use href="#icon" x="cx" y="cy"/>` (no transform) places that centered content exactly at
 // (cx, cy) in the use element's coordinate space — the same trick the old #burgIcons/#anchors <g>

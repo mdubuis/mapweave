@@ -24,8 +24,10 @@ export default ({ mode }: { mode: string }) => ({
     emptyOutDir: true, // outDir sits outside root, so Vite would otherwise keep every past build's chunks
     rollupOptions: {
       input: {
-        main: fileURLToPath(new URL("./src/index.html", import.meta.url)),
-        wiki: fileURLToPath(new URL("./src/wiki.html", import.meta.url))
+        // index.html is the wiki (the app's landing page); map.html is the map, opened from the
+        // wiki's "View Map" panel or directly — see MAPWEAVE.md's "wiki as root" decision
+        wiki: fileURLToPath(new URL("./src/index.html", import.meta.url)),
+        map: fileURLToPath(new URL("./src/map.html", import.meta.url))
       }
     }
   },

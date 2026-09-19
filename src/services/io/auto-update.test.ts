@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import indexHtml from "@/index.html?raw";
+import mapHtml from "@/map.html?raw";
 import "@/generators/added-labels";
 import "@/generators/features"; // migrations call the Features module through its global
 import { confirmationDialog } from "@/components/dialog/dialog-helpers";
@@ -472,13 +472,10 @@ describe("missing svg defs", () => {
     expect(document.getElementById("deftemp")).toBeNull();
   });
 
-  // the migration carries its own copy of the markup, so it drifts the moment index.html gains a
+  // the migration carries its own copy of the markup, so it drifts the moment map.html gains a
   // defs element it does not know about. #filters is out of scope: it is large, static and old maps have it
-  it("restores every defs element index.html declares", () => {
-    const defs = indexHtml.slice(
-      indexHtml.indexOf("<defs>", indexHtml.indexOf('id="map"')),
-      indexHtml.indexOf("</defs>")
-    );
+  it("restores every defs element map.html declares", () => {
+    const defs = mapHtml.slice(mapHtml.indexOf("<defs>", mapHtml.indexOf('id="map"')), mapHtml.indexOf("</defs>"));
     const declared = Array.from(defs.replace(/<g id="filters">[\s\S]*?<\/g>/, "").matchAll(/\bid="([^"]+)"/g));
 
     document.body.innerHTML = /* html */ `<svg id="map"><defs></defs><g id="viewbox"></g></svg>`;

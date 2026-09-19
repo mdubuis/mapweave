@@ -17,6 +17,7 @@ import {
 } from "@/wiki/editor";
 import { buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
 import { type Era, isEntityInEra, loadEras, resolveEntityForEra } from "@/wiki/eras";
+import { parseFrontmatter } from "@/wiki/frontmatter";
 import { buildGraph } from "@/wiki/graph";
 import { renderMarkdown } from "@/wiki/markdown";
 import { parseObjective, parseWeightedEntry, rollEncounter } from "@/wiki/scenario";
@@ -107,6 +108,23 @@ async function loadDatabaseEntities(mapId: number): Promise<void> {
   renderSidebar(el<HTMLInputElement>("search").value);
 }
 
+/**
+ * Connects to the most recently created map on load, so the common case (one world, kept current)
+ * needs no manual "Connect to map database…" click. Silent on any failure — no server running, no
+ * maps yet, a network error — the wiki must stay fully usable on file entities alone either way.
+ * The manual button is still there for switching to a different map than the most recent one.
+ */
+async function autoConnectToLatestMap(): Promise<void> {
+  try {
+    const maps = await fetchAvailableMaps(API_BASE);
+    if (!maps.length) return;
+    await loadDatabaseEntities(maps[0].id);
+    render();
+  } catch {
+    el<HTMLElement>("db-indicator").textContent = "DB: offline";
+  }
+}
+
 function renderConnectDatabaseView(): void {
   const content = el<HTMLElement>("content");
   content.innerHTML = `<h1>Connect to map database</h1><p>Loading available maps…</p>`;
@@ -161,15 +179,19 @@ function renderSidebar(filter = ""): void {
   const list = el<HTMLElement>("entity-list");
   const grouped = new Map<string, WikiEntity[]>();
   const needle = filter.toLowerCase();
+  let matchCount = 0;
 
   for (const entity of entities) {
     if (activeEra && !isEntityInEra(entity, activeEra)) continue;
     const haystack = `${entity.frontmatter.title} ${(entity.frontmatter.tags ?? []).join(" ")}`.toLowerCase();
     if (needle && !haystack.includes(needle)) continue;
+    matchCount++;
     const group = grouped.get(entity.frontmatter.type) ?? [];
     group.push(entity);
     grouped.set(entity.frontmatter.type, group);
   }
+
+  el<HTMLElement>("search-count").textContent = needle ? `${matchCount} result${matchCount === 1 ? "" : "s"}` : "";
 
   list.innerHTML = "";
   for (const [type, items] of [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -336,6 +358,21 @@ function escapeForTextarea(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 }
 
+function wordCount(text: string): number {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
+/** Trailing-edge debounce: fires `ms` after the last call, not on the first one — right for a
+ *  "update once typing pauses" preview, unlike a leading-edge/cooldown debounce */
+function debounceTrailing<T extends (...args: never[]) => void>(fn: T, ms: number): T {
+  let timer = 0;
+  return ((...args: never[]) => {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), ms);
+  }) as T;
+}
+
 function renderEditorView(slug: string): void {
   const entity = byslug(slug);
   const handle = handles.get(slug);
@@ -347,17 +384,43 @@ function renderEditorView(slug: string): void {
   const raw = rawContents.get(slug) ?? "";
   const content = el<HTMLElement>("content");
   content.innerHTML = `
-    <header class="entity-header"><h1>Editing: ${entity.frontmatter.title}</h1></header>
-    <textarea id="editor-textarea" spellcheck="false">${escapeForTextarea(raw)}</textarea>
+    <header class="entity-header">
+      <h1>Editing: ${entity.frontmatter.title}</h1>
+      <div class="editor-toolbar">
+        <span id="editor-word-count" class="muted"></span>
+        <label class="preview-toggle"><input type="checkbox" id="preview-toggle" checked /> Preview</label>
+      </div>
+    </header>
+    <div id="editor-split">
+      <textarea id="editor-textarea" spellcheck="false">${escapeForTextarea(raw)}</textarea>
+      <article id="editor-preview" class="entity-body"></article>
+    </div>
     <div class="editor-actions">
       <button id="save-btn" type="button">Save</button>
       <button id="cancel-btn" type="button">Cancel</button>
     </div>
   `;
 
+  const textarea = el<HTMLTextAreaElement>("editor-textarea");
+  const preview = el<HTMLElement>("editor-preview");
+  const wordCountEl = el<HTMLElement>("editor-word-count");
+
+  function updatePreview(): void {
+    const { content: body } = parseFrontmatter(textarea.value);
+    preview.innerHTML = renderMarkdown(body, resolveLink);
+    const count = wordCount(body);
+    wordCountEl.textContent = `${count} word${count === 1 ? "" : "s"}`;
+  }
+  updatePreview();
+  textarea.addEventListener("input", debounceTrailing(updatePreview, 200));
+
+  el<HTMLInputElement>("preview-toggle").addEventListener("change", event => {
+    el<HTMLElement>("editor-split").classList.toggle("preview-hidden", !(event.target as HTMLInputElement).checked);
+  });
+
   el<HTMLButtonElement>("cancel-btn").addEventListener("click", () => renderEntityView(slug));
   el<HTMLButtonElement>("save-btn").addEventListener("click", async () => {
-    await saveEntity(handle, el<HTMLTextAreaElement>("editor-textarea").value);
+    await saveEntity(handle, textarea.value);
     await reloadFromDirectory();
     renderEntityView(slug);
   });
@@ -590,6 +653,11 @@ function initToolbar(): void {
     renderSidebar((event.target as HTMLInputElement).value);
   });
 
+  el<HTMLButtonElement>("new-page-btn").addEventListener("click", () => {
+    const title = window.prompt("Title for the new page:");
+    if (title?.trim()) location.hash = `#/new?title=${encodeURIComponent(title.trim())}`;
+  });
+
   el<HTMLSelectElement>("era-select").addEventListener("change", event => {
     activeEra = (event.target as HTMLSelectElement).value || undefined;
     renderSidebar(el<HTMLInputElement>("search").value);
@@ -630,7 +698,7 @@ function initToolbar(): void {
   let mapFrameLoaded = false;
   el<HTMLButtonElement>("toggle-map-btn").addEventListener("click", () => {
     if (!mapFrameLoaded) {
-      mapFrame.src = "./index.html";
+      mapFrame.src = "./map.html";
       mapFrameLoaded = true;
     }
     el<HTMLElement>("map-panel").removeAttribute("hidden");
@@ -643,3 +711,4 @@ function initToolbar(): void {
 window.addEventListener("hashchange", render);
 initToolbar();
 render();
+void autoConnectToLatestMap();

@@ -12,7 +12,12 @@ npm run dev -- --port 5199 --strictPort   # or just `npm run dev`
 
 Open the URL Vite prints (something like `http://localhost:5199/Fantasy-Map-Generator/` — the
 `/Fantasy-Map-Generator/` base path is inherited from upstream FMG and hasn't been renamed yet).
-The map app boots as usual: a random map generates on load.
+This lands on the **wiki** now (`src/index.html`) — the app is centered on writing, not the map.
+It also tries to auto-connect to the most recently created map in the database (see section 2) on
+load; if no server is running there, it fails silently and the wiki still works fine on file-only
+entities. To open the map itself, click **View Map** in the wiki's header (it loads `map.html` in a
+slide-in panel) — or go to `…/map.html` directly. From the map, the small circular button
+(top-right) opens the wiki back the same way.
 
 ## 2. Test the Postgres/PostGIS migration (Phases 1-2)
 
@@ -107,9 +112,9 @@ matches a browser run for the same seed (the one check that needs a real browser
 
 ## 4. Try the wiki app (Phase 2/4)
 
-Click the circular wiki button (top-right of the map screen) to open it as a slide-in panel — no
-map needs to be loaded for this. You can also open `/Fantasy-Map-Generator/wiki.html` directly in
-its own tab if you'd rather not have it embedded.
+The wiki is what you land on by default now (see section 1) — no need to open anything separately.
+If you're on the map instead (`map.html`), click the circular wiki button (top-right) to open it as
+a slide-in panel, no map needs to be loaded for that either.
 
 - Browse the seed content: **Old Port**, **Mira Thorne**, **Silver Compact**, **The Salt War**, and
   the two eras, all cross-linked with `[[wikilinks]]`. Click through them.
@@ -271,7 +276,7 @@ Run these before considering any change done — same commands CI and the pre-co
 npx tsc --noEmit     # type errors
 npm run lint         # biome check --write
 npm run test         # vitest unit tests
-npm run build        # both index.html and wiki.html bundles
+npm run build        # both index.html (wiki) and map.html (map) bundles
 ```
 
 `npm run test:e2e` (Playwright) exists but per project convention is **never run automatically** —
@@ -283,7 +288,7 @@ only run it yourself, deliberately, if you need end-to-end coverage.
 |---|---|
 | The lore file format itself | `wiki/SCHEMA.md` (spec) + `src/wiki/entities.ts`, `frontmatter.ts` (parsing) |
 | Markdown rendering (tables, etc. aren't supported yet) | `src/wiki/markdown.ts` |
-| The wiki browsing/editing UI | `src/wiki-main.ts`, `src/wiki.html`, `src/wiki.css` |
+| The wiki browsing/editing UI | `src/wiki-main.ts`, `src/index.html`, `src/wiki.css` |
 | How map objects link to wiki pages | `src/wiki/map-link.ts`, plus the three call sites: `src/controllers/burg-editor.ts`, `markers-editor.ts`, `states-editor.ts` |
 | Timeline / era logic | `src/wiki/eras.ts` (resolution), `src/services/era-switcher.ts` (map-side UI) |
 | Seed/example content | `wiki/**/*.md` — feel free to replace with your real world's content |

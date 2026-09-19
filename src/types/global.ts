@@ -38,7 +38,7 @@ declare global {
   var applyStoredStyles: () => void;
   var getStylePreset: (desiredPreset: string) => Promise<[string, Record<string, unknown>]>;
 
-  // Vendored libraries, each loaded by its own <script> tag in index.html
+  // Vendored libraries, each loaded by its own <script> tag in map.html
   var $: (selector: any) => any; // jQuery + jQuery UI
   var aleaPRNG: (seed: string | number) => () => number;
   var FlatQueue: any;

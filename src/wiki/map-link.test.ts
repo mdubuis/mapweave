@@ -23,12 +23,12 @@ describe("findWikiEntitySlug", () => {
 
 describe("wikiLinkHref", () => {
   it("links straight to the existing page", () => {
-    expect(wikiLinkHref("founding", { kind: "burg", id: 7, name: "Old Port" })).toBe("./wiki.html#/entity/old-port");
+    expect(wikiLinkHref("founding", { kind: "burg", id: 7, name: "Old Port" })).toBe("./index.html#/entity/old-port");
   });
 
   it("prefills a create-page flow, carrying the era, when nothing is linked yet", () => {
     const href = wikiLinkHref("founding", { kind: "marker", id: 3, name: "Ruined Watchtower" });
-    expect(href.startsWith("./wiki.html#/new?")).toBe(true);
+    expect(href.startsWith("./index.html#/new?")).toBe(true);
     expect(href.includes("mapKind=marker")).toBe(true);
     expect(href.includes("mapId=3")).toBe(true);
     expect(href.includes("mapEra=founding")).toBe(true);
