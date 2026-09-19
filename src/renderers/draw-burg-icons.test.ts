@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { getLeafletMap } from "@/components/leaflet-map";
 import type { Burg } from "@/generators/burgs-generator";
 
 import "@/generators/styles";
-import { drawBurgIcons, eraseBurgIcons } from "./draw-burg-icons";
+import { drawBurgIcons, eraseBurgIcons, refreshBurgIconsZoomSize } from "./draw-burg-icons";
 
 function burg(i: number, x = 10, y = 10, overrides: Partial<Burg> = {}): Burg {
   return { i, cell: 0, group: "town", x, y, ...overrides } as Burg;
@@ -20,6 +21,10 @@ beforeEach(() => {
   styles.burgIcons.burgIcons.groups.town.attrs.filter = null;
   styles.burgIcons.anchors.groups.town.options.size = 3;
   options.map.burgs.groups = [{ name: "town", order: 0 }] as never;
+});
+
+afterEach(() => {
+  getLeafletMap().setZoom(getLeafletMap().getMinZoom(), { animate: false });
 });
 
 test("draws every burg icon, tagged with its id and styled from the group store", () => {
@@ -100,6 +105,35 @@ test("group render order follows options.map.burgs.groups order, not declaration
   drawBurgIcons();
   expect(document.getElementById("burg1")).not.toBeNull();
   expect(document.getElementById("burg2")).not.toBeNull();
+});
+
+test("icon size scales with zoom — burg icons have no rescale toggle, always linear", () => {
+  drawBurgIcons();
+  expect(document.getElementById("burg1")?.getAttribute("width")).toBe("6"); // size 3, box = 2*zoom*size at zoom 1
+
+  getLeafletMap().setZoom(4, { animate: false });
+  drawBurgIcons();
+  expect(document.getElementById("burg1")?.getAttribute("width")).toBe("24"); // box = 2*4*3
+});
+
+test("refreshBurgIconsZoomSize updates icon size for the current zoom without a full redraw", () => {
+  drawBurgIcons();
+  expect(document.getElementById("burg1")?.getAttribute("width")).toBe("6");
+
+  getLeafletMap().setZoom(4, { animate: false });
+  refreshBurgIconsZoomSize();
+  expect(document.getElementById("burg1")?.getAttribute("width")).toBe("24");
+});
+
+test("refreshBurgIconsZoomSize skips the rebuild when the zoom level hasn't actually changed", () => {
+  drawBurgIcons();
+  getLeafletMap().setZoom(4, { animate: false });
+  refreshBurgIconsZoomSize(); // syncs its internal "last zoom sized" tracker to 4
+  const settled = document.getElementById("burg1");
+  expect(settled).not.toBeNull();
+
+  refreshBurgIconsZoomSize(); // zoom unchanged since the call above — no-op
+  expect(document.getElementById("burg1")).toBe(settled);
 });
 
 test("special characters in group name, icon and fill are escaped, not left raw in markup", () => {

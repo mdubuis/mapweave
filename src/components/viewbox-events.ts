@@ -15,8 +15,14 @@ const onMouseMove = debounce(handleMouseMove, 100);
  * shared ancestor of both the legacy `<svg id="map">` tree (hosted in its own `legacySvg` pane,
  * see leaflet-map.ts) and the panes the Leaflet-converted layers render into. A click on a
  * converted-layer feature never bubbles through `#viewbox` at all — different subtree entirely —
- * so binding there would silently miss it. map-placement.ts's click-to-place tools bind to this
- * same node for the same reason, replacing this listener while a tool is active (see there).
+ * so binding there would silently miss it.
+ *
+ * map-placement.ts's click-to-place tools stay bound to `#viewbox` itself instead (their world-
+ * coordinate math needs its SVG CTM) — since that's a *different* node than this one, the two
+ * listeners no longer replace each other the way same-node d3 `.on()` calls used to. Each side is
+ * responsible for clearing the other's leftover listener on its own node when it takes over: see
+ * `map-placement.ts`'s `toggleMapPlacement()` (clears this listener) and `#viewbox`'s own
+ * `.on("click", null)` below (clears any leftover placement listener once a tool stops).
  */
 export function clickSurface() {
   return select(getLeafletMap().getContainer());
@@ -28,6 +34,7 @@ export function applyDefaultViewboxEvents(): void {
   select<SVGGElement, unknown>("#viewbox")
     .style("cursor", "default")
     .on(".drag", null)
+    .on("click", null) // clears a leftover map-placement.ts click listener, if a tool was active
     .on("touchmove mousemove", onMouseMove);
   clickSurface().on("click", onClick);
 

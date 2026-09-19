@@ -13,3 +13,8 @@ export function eraseBurgIcons(): void {
 export function ensureBurgIconsPane(): void {
   burgIconLayer.ensurePane();
 }
+
+/** Recompute burg/anchor icon sizes for the current zoom — call once a zoom gesture settles */
+export function refreshBurgIconsZoomSize(): void {
+  burgIconLayer.refreshSizeForZoom();
+}

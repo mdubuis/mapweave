@@ -59,8 +59,15 @@ function getMarkerContent({ icon, dx = 50, dy = 50, px = 12, pin, fill, stroke }
       <image x="${dx / 2}%" y="${dy / 2}%" width="${px}px" height="${px}px" href="${isExternal ? escapeHtml(icon) : ""}" />`;
 }
 
+// The old renderer computed a *world-space* size that #viewbox's own scale(viewport.scale) transform
+// then multiplied by zoom automatically (worldSize = rescale ? size/5 + 24/scale : size, apparent =
+// scale * worldSize). Leaflet's divIcon has no such implicit transform — its size is screen pixels
+// directly — so this computes the equivalent *apparent* size straight away: zoom * (size/5) + 24 when
+// rescale is on (icons grow with zoom, floored at a legible 24px), or zoom * size when it's off
+// (plain linear scaling, same as any other zoomed map content).
 function getMarkerSize({ size = 30 }: Marker, rescale: number, zoom: number): number {
-  return rescale ? Math.max(rn(size / 5 + 24 / zoom, 2), 1) : size;
+  const apparentSize = rescale ? (zoom * size) / 5 + 24 : zoom * size;
+  return Math.max(rn(apparentSize, 2), 1);
 }
 
 // world-space top-left corner, in the same convention the old renderer used — old code that reads
@@ -125,14 +132,23 @@ function wireDrag(leafletMarker: L.Marker): void {
   });
 }
 
-/** Recompute every rescale-enabled marker's icon size for the current zoom — call on zoom end, not
- *  per frame: rebuilding a divIcon means replacing the marker's DOM node */
+let lastZoomSized: number | undefined;
+
+/** Recompute every marker's icon size for the current zoom — every marker needs this, not just
+ *  rescale-enabled ones (see getMarkerSize), since apparent size always depends on zoom now that
+ *  there's no implicit #viewbox-style scale transform doing it automatically. Call on zoom end, not
+ *  per frame: rebuilding a divIcon means replacing the marker's DOM node. Skips the rebuild
+ *  entirely when the zoom level hasn't actually changed (e.g. a pure pan) */
 export function refreshSizeForZoom(): void {
-  const rescale = styles.markers.options.rescale;
-  if (!layerGroup || !rescale) return;
+  if (!layerGroup) return;
   const zoom = getLeafletMap().getZoom();
+  if (zoom === lastZoomSized) return;
+  lastZoomSized = zoom;
+
+  const rescale = styles.markers.options.rescale;
+  const byId = new Map(pack.markers.map((m: Marker) => [m.i, m]));
   for (const [id, leafletMarker] of markers) {
-    const marker = pack.markers.find((m: Marker) => m.i === id);
+    const marker = byId.get(id);
     if (!marker) continue;
     leafletMarker.setIcon(buildIcon(marker, getMarkerSize(marker, rescale, zoom)));
   }

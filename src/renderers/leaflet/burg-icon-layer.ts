@@ -48,9 +48,20 @@ function buildIcon(
   return L.divIcon({ html, className: "", iconSize: [box, box], iconAnchor: [center, center] });
 }
 
+interface IconMeta {
+  group: string;
+  icon: string;
+  baseSize: number;
+  attrs: BurgIconAttrs;
+  isAnchor: boolean;
+}
+
 const primaryMarkers = new Map<number, L.Marker>();
 const anchorMarkers = new Map<number, L.Marker>();
+const primaryMeta = new Map<number, IconMeta>();
+const anchorMeta = new Map<number, IconMeta>();
 let layerGroup: L.LayerGroup | undefined;
+let lastZoomSized: number | undefined;
 
 function ensureLayerGroup(): L.LayerGroup {
   if (!layerGroup) {
@@ -64,12 +75,16 @@ export function ensurePane(): void {
   getFeaturePane(PANE_NAME, Z_INDEX);
 }
 
-/** Full rebuild from pack.burgs, grouped and styled exactly as the old renderer did */
+/** Full rebuild from pack.burgs, grouped and styled exactly as the old renderer did. Icon size is
+ *  apparent (screen) size, scaled by the current zoom — see refreshSizeForZoom for why: unlike the
+ *  old renderer, nothing here is nested inside an implicitly-scaled parent transform any more */
 export function update(burgs: Burg[]): void {
   const group = ensureLayerGroup();
   group.clearLayers();
   primaryMarkers.clear();
   anchorMarkers.clear();
+  primaryMeta.clear();
+  anchorMeta.clear();
 
   const burgsByGroup = new Map<string, Burg[]>();
   for (const burg of burgs) {
@@ -84,6 +99,8 @@ export function update(burgs: Burg[]): void {
   const primaryDefault = primaryGroups.town || Object.values(primaryGroups)[0];
   const anchorDefault = anchorGroups.town || Object.values(anchorGroups)[0];
   const paneId = getFeaturePane(PANE_NAME, Z_INDEX).id;
+  const zoom = getLeafletMap().getZoom();
+  lastZoomSized = zoom;
 
   const orderedGroups = [...options.map.burgs.groups].sort((a, b) => a.order - b.order);
   for (const { name, order } of orderedGroups) {
@@ -93,21 +110,24 @@ export function update(burgs: Burg[]): void {
     const primaryStyle = primaryGroups[name] || primaryDefault;
     const anchorStyle = anchorGroups[name] || anchorDefault;
     const icon = escapeHtml(primaryStyle?.options.icon || "#icon-circle");
+    const primaryBaseSize = primaryStyle?.options.size ?? 1;
+    const anchorBaseSize = anchorStyle?.options.size ?? 1;
+    const primaryAttrs = primaryStyle?.attrs ?? {};
+    const anchorAttrs = anchorStyle?.attrs ?? {};
 
     for (const burg of burgsInGroup) {
-      const primarySize = primaryStyle?.options.size ?? 1;
-      const primaryIcon = buildIcon(burg.i, name, icon, primarySize, primaryStyle?.attrs ?? {}, false);
+      const primaryIcon = buildIcon(burg.i, name, icon, zoom * primaryBaseSize, primaryAttrs, false);
       const marker = L.marker([burg.y, burg.x], {
         icon: primaryIcon,
         pane: paneId,
         zIndexOffset: order * GROUP_ORDER_SCALE
       });
       primaryMarkers.set(burg.i, marker);
+      primaryMeta.set(burg.i, { group: name, icon, baseSize: primaryBaseSize, attrs: primaryAttrs, isAnchor: false });
       group.addLayer(marker);
 
       if (!burg.port) continue;
-      const anchorSize = anchorStyle?.options.size ?? 1;
-      const anchorIcon = buildIcon(burg.i, name, "#icon-anchor", anchorSize, anchorStyle?.attrs ?? {}, true);
+      const anchorIcon = buildIcon(burg.i, name, "#icon-anchor", zoom * anchorBaseSize, anchorAttrs, true);
       const anchorMarker = L.marker([burg.y, burg.x], {
         icon: anchorIcon,
         pane: paneId,
@@ -115,8 +135,37 @@ export function update(burgs: Burg[]): void {
         zIndexOffset: order * GROUP_ORDER_SCALE + 1
       });
       anchorMarkers.set(burg.i, anchorMarker);
+      anchorMeta.set(burg.i, {
+        group: name,
+        icon: "#icon-anchor",
+        baseSize: anchorBaseSize,
+        attrs: anchorAttrs,
+        isAnchor: true
+      });
       group.addLayer(anchorMarker);
     }
+  }
+}
+
+/** Recompute every burg/anchor icon's apparent size for the current zoom — burg icons have no
+ *  per-group "rescale" toggle (unlike markers): they always scaled with zoom in the old renderer,
+ *  implicitly, as part of #viewbox's own shared transform. Call on zoom end, not per frame; skips
+ *  entirely when the zoom level hasn't actually changed (e.g. a pure pan) */
+export function refreshSizeForZoom(): void {
+  if (!layerGroup) return;
+  const zoom = getLeafletMap().getZoom();
+  if (zoom === lastZoomSized) return;
+  lastZoomSized = zoom;
+
+  for (const [id, marker] of primaryMarkers) {
+    const meta = primaryMeta.get(id);
+    if (!meta) continue;
+    marker.setIcon(buildIcon(id, meta.group, meta.icon, zoom * meta.baseSize, meta.attrs, false));
+  }
+  for (const [id, marker] of anchorMarkers) {
+    const meta = anchorMeta.get(id);
+    if (!meta) continue;
+    marker.setIcon(buildIcon(id, meta.group, meta.icon, zoom * meta.baseSize, meta.attrs, true));
   }
 }
 
@@ -124,4 +173,6 @@ export function clear(): void {
   layerGroup?.clearLayers();
   primaryMarkers.clear();
   anchorMarkers.clear();
+  primaryMeta.clear();
+  anchorMeta.clear();
 }
