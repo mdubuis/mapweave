@@ -1,12 +1,11 @@
-// Azgaar and contributors, 2017-2026. MIT License
-// https://github.com/Azgaar/Fantasy-Map-Generator
+// Mapweave — forked from Azgaar's Fantasy Map Generator (2017-2024). MIT License.
+// https://github.com/mdubuis/mapweave
 
 import "@/services/logging";
 import "@/components/globals";
 import "@/components/options/tabs";
 
 import "@/utils";
-import "@/data/supporters";
 import "@/data/heightmap-templates";
 import "@/data/precreated-heightmaps";
 import "@/generators";

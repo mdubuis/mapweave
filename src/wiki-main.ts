@@ -7,7 +7,14 @@ import {
   type SimulationNodeDatum,
   select
 } from "d3";
-import { dbRefOf, fetchAvailableMaps, loadGeneratedEntities, type MapSummary } from "@/wiki/db-entities";
+import {
+  type ConnectedMapInfo,
+  dbRefOf,
+  fetchAvailableMaps,
+  fetchConnectedMapInfo,
+  loadGeneratedEntities,
+  type MapSummary
+} from "@/wiki/db-entities";
 import {
   createEntity,
   isFileSystemAccessSupported,
@@ -18,7 +25,16 @@ import {
 import { buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
 import { type Era, isEntityInEra, loadEras, resolveEntityForEra } from "@/wiki/eras";
 import { parseFrontmatter } from "@/wiki/frontmatter";
+import { patchFrontmatterType } from "@/wiki/frontmatter-patch";
 import { buildGraph } from "@/wiki/graph";
+import {
+  PLACEMENT_CANCEL,
+  PLACEMENT_REQUEST,
+  PLACEMENT_RESULT,
+  type PlacementKind,
+  type PlacementMessage
+} from "@/wiki/map-bridge";
+import { insertMapRefBlock } from "@/wiki/map-ref-patch";
 import { renderMarkdown } from "@/wiki/markdown";
 import { parseObjective, parseWeightedEntry, rollEncounter } from "@/wiki/scenario";
 import {
@@ -41,6 +57,20 @@ let eras: Era[] = loadEras(entities);
 let handles = new Map<string, FileSystemFileHandle>();
 let rawContents = new Map<string, string>();
 let dirHandle: FileSystemDirectoryHandle | undefined;
+let mapFrameLoaded = false;
+/** connectedMap.id the iframe was last loaded with (undefined = loaded with no DB map) — lets
+ *  openMapPanel notice the connected map changed and reload, see mapFrameSrc. */
+let mapFrameKey: number | undefined;
+/** The DB-connected map's identity for the map panel — see loadDatabaseEntities/openMapPanel. */
+let connectedMap: ConnectedMapInfo | undefined;
+/** Cached result of the last fetchAvailableMaps() call — the world switcher and the "choose a
+ *  world" view both need the full list; refetched whenever either is opened, not on every render. */
+let availableWorlds: MapSummary[] = [];
+
+const WORLD_STORAGE_KEY = "mapweave.lastMapId";
+/** "Place on map" request in flight — see requestPlacement/the message listener in initToolbar().
+ *  Only one at a time; the UI doesn't offer a second "Place on map" click while this is set. */
+let pendingPlacement: { requestId: string; slug: string; era: string; kind: PlacementKind } | undefined;
 
 const API_BASE = "http://127.0.0.1:3001";
 
@@ -60,18 +90,29 @@ const resolveLink = (target: string) => resolveTarget(slugIndex, target);
 
 const MAP_REF_KINDS: MapRefKind[] = ["burg", "state", "province", "religion", "culture", "marker", "river"];
 
+const ENTITY_TYPES = ["place", "character", "faction", "event", "item", "quest", "encounter-table", "session-log"];
+
+/** Current type first if it's not one of the standard ones (e.g. "era"), so the select never
+ *  silently swaps a page to a different type just by opening the editor. */
+function typeOptionsHtml(selected: string): string {
+  const types = ENTITY_TYPES.includes(selected) ? ENTITY_TYPES : [selected, ...ENTITY_TYPES];
+  return types.map(type => `<option value="${type}"${type === selected ? " selected" : ""}>${type}</option>`).join("");
+}
+
 type Route =
   | { view: "list" }
   | { view: "entity"; slug: string }
   | { view: "new"; title: string; mapRef?: MapRef }
   | { view: "quests" }
-  | { view: "sessions" };
+  | { view: "sessions" }
+  | { view: "choose-world" };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
   if (hash.startsWith("entity/")) return { view: "entity", slug: decodeURIComponent(hash.slice("entity/".length)) };
   if (hash.startsWith("quests")) return { view: "quests" };
   if (hash.startsWith("sessions")) return { view: "sessions" };
+  if (hash.startsWith("choose-world")) return { view: "choose-world" };
   if (hash.startsWith("new")) {
     const params = new URLSearchParams(hash.split("?")[1] ?? "");
     const title = params.get("title") ?? "";
@@ -101,66 +142,118 @@ async function reloadFromDirectory(): Promise<void> {
 }
 
 async function loadDatabaseEntities(mapId: number): Promise<void> {
-  dbEntities = await loadGeneratedEntities(API_BASE, mapId);
+  const [entities, mapInfo] = await Promise.all([
+    loadGeneratedEntities(API_BASE, mapId),
+    fetchConnectedMapInfo(API_BASE, mapId)
+  ]);
+  dbEntities = entities;
+  connectedMap = mapInfo;
   mergeEntitySources();
-  el<HTMLElement>("db-indicator").textContent = `DB: map #${mapId} (${dbEntities.length} entities)`;
+  localStorage.setItem(WORLD_STORAGE_KEY, String(mapId));
+  updateWorldSwitcherLabel();
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
 }
 
-/**
- * Connects to the most recently created map on load, so the common case (one world, kept current)
- * needs no manual "Connect to map database…" click. Silent on any failure — no server running, no
- * maps yet, a network error — the wiki must stay fully usable on file entities alone either way.
- * The manual button is still there for switching to a different map than the most recent one.
- */
-async function autoConnectToLatestMap(): Promise<void> {
-  try {
-    const maps = await fetchAvailableMaps(API_BASE);
-    if (!maps.length) return;
-    await loadDatabaseEntities(maps[0].id);
-    render();
-  } catch {
-    el<HTMLElement>("db-indicator").textContent = "DB: offline";
-  }
+/** Reflects the connected world's name in the sidebar control — looked up from availableWorlds
+ *  (populated by whichever of connectToPersistedWorld/openWorldMenu/renderChooseWorldView last
+ *  fetched the list) rather than carried on ConnectedMapInfo, which has no name field. */
+function updateWorldSwitcherLabel(): void {
+  const label = el<HTMLElement>("world-switcher-label");
+  const name = connectedMap && availableWorlds.find(map => map.id === connectedMap!.id)?.name;
+  label.textContent = name ?? (connectedMap ? `World #${connectedMap.id}` : "Choose a world…");
 }
 
-function renderConnectDatabaseView(): void {
+/**
+ * Connects to whichever world the user picked last time (see renderChooseWorldView/openWorldMenu),
+ * so returning to the app doesn't re-ask every load — but never guesses "the most recent map" the
+ * way the old auto-connect did. No persisted world, or it no longer exists: sends a first-time
+ * visitor (still on the plain landing route) to #/choose-world; leaves a direct deep link (e.g. a
+ * bookmarked entity page) alone rather than yanking it away. Silent on any network failure — the
+ * wiki must stay fully usable on file entities alone either way.
+ */
+async function connectToPersistedWorld(): Promise<void> {
+  const persistedId = Number(localStorage.getItem(WORLD_STORAGE_KEY)) || undefined;
+  try {
+    availableWorlds = await fetchAvailableMaps(API_BASE);
+    const match = persistedId && availableWorlds.find(map => map.id === persistedId);
+    if (match) {
+      await loadDatabaseEntities(match.id);
+    } else if (currentRoute().view === "list") {
+      location.hash = "#/choose-world";
+      return;
+    }
+  } catch {
+    // offline: file entities alone still work, same as before this existed
+  }
+  updateWorldSwitcherLabel();
+  render();
+}
+
+/** Shared markup for a list of worlds — callers wire up their own click handler on
+ *  `.world-list-item` afterward, since the "pick a world" action differs (route vs. in-place). */
+function renderWorldPicker(maps: MapSummary[]): string {
+  if (!maps.length)
+    return `<p class="muted">No worlds yet — generate or import one first (see <code>server/README.md</code>).</p>`;
+  return `<ul class="world-list">${maps
+    .map(
+      map =>
+        `<li><button type="button" class="world-list-item${map.id === connectedMap?.id ? " current" : ""}" data-map-id="${map.id}"><strong>${map.name}</strong> <span class="muted">seed ${map.seed}</span></button></li>`
+    )
+    .join("")}</ul>`;
+}
+
+function renderChooseWorldView(): void {
   const content = el<HTMLElement>("content");
-  content.innerHTML = `<h1>Connect to map database</h1><p>Loading available maps…</p>`;
+  content.innerHTML = `<h1>Choose a world</h1><p>Loading worlds…</p>`;
 
   fetchAvailableMaps(API_BASE)
     .then((maps: MapSummary[]) => {
-      if (!maps.length) {
-        content.innerHTML = `<h1>Connect to map database</h1><p>No maps yet — generate or import one first (see <code>server/README.md</code>).</p>`;
-        return;
-      }
-
-      content.innerHTML = `
-        <h1>Connect to map database</h1>
-        <label>Map:
-          <select id="db-map-select">
-            ${maps.map(map => `<option value="${map.id}">${map.name} (seed ${map.seed})</option>`).join("")}
-          </select>
-        </label>
-        <button id="db-connect-btn" type="button">Connect</button>
-      `;
-
-      el<HTMLButtonElement>("db-connect-btn").addEventListener("click", async () => {
-        const mapId = Number(el<HTMLSelectElement>("db-map-select").value);
-        await loadDatabaseEntities(mapId);
-        render();
+      availableWorlds = maps;
+      content.innerHTML = `<h1>Choose a world</h1>${renderWorldPicker(maps)}`;
+      content.querySelectorAll<HTMLButtonElement>(".world-list-item").forEach(button => {
+        button.addEventListener("click", async () => {
+          await loadDatabaseEntities(Number(button.dataset.mapId));
+          location.hash = "#/";
+        });
       });
     })
     .catch((error: Error) => {
       content.innerHTML = `
-        <h1>Connect to map database</h1>
+        <h1>Choose a world</h1>
         <p class="wiki-link-broken">Could not reach the API at ${API_BASE} — is the server running?
         (<code>cd server && npm run start</code>)</p>
         <p class="summary">${error.message}</p>
       `;
     });
   renderSidebar(el<HTMLInputElement>("search").value);
+}
+
+/** Quick world switch from anywhere in the wiki, without leaving the page you're on (unlike
+ *  #/choose-world, a real route that replaces #content — appropriate for a first-time landing,
+ *  not for switching mid-read). Toggled by the sidebar's world-switcher button. */
+async function toggleWorldMenu(): Promise<void> {
+  const menu = el<HTMLElement>("world-menu");
+  if (!menu.hasAttribute("hidden")) {
+    menu.setAttribute("hidden", "");
+    return;
+  }
+
+  menu.innerHTML = `<p class="muted">Loading…</p>`;
+  menu.removeAttribute("hidden");
+  try {
+    availableWorlds = await fetchAvailableMaps(API_BASE);
+    menu.innerHTML = `${renderWorldPicker(availableWorlds)}<a href="#/choose-world">Browse all worlds…</a>`;
+    menu.querySelectorAll<HTMLButtonElement>(".world-list-item").forEach(button => {
+      button.addEventListener("click", async () => {
+        menu.setAttribute("hidden", "");
+        await loadDatabaseEntities(Number(button.dataset.mapId));
+        render();
+      });
+    });
+  } catch {
+    menu.innerHTML = `<p class="wiki-link-broken">Could not reach the API — is the server running?</p>`;
+  }
 }
 
 function renderEraSelect(): void {
@@ -293,9 +386,19 @@ function mountEncounterRoller(container: HTMLElement, table: string[]): void {
 /** FMG's `?burg=<id>` / `?cell=<id>` URL params already focus the map — see docs/wiki/URL-parameters.md */
 function mapViewHref(mapRef: MapRef | undefined): string | undefined {
   if (!mapRef) return undefined;
-  if (mapRef.kind === "burg") return `./index.html?burg=${mapRef.id}&scale=8`;
-  if (mapRef.cell !== undefined) return `./index.html?cell=${mapRef.cell}&scale=8`;
+  if (mapRef.kind === "burg") return `./map.html?burg=${mapRef.id}&scale=8`;
+  if (mapRef.cell !== undefined) return `./map.html?cell=${mapRef.cell}&scale=8`;
   return undefined;
+}
+
+/** Gate for offering "Place on map": must be editable, have no map_ref for any era yet, and — if
+ *  this world defines eras at all — have one selected (an unscoped map_ref would be invisible in
+ *  every era's view, see isEntityInEra). */
+function canPlaceOnMap(entity: WikiEntity): boolean {
+  if (!dirHandle || !handles.has(entity.slug)) return false;
+  if (Object.keys(entity.frontmatter.map_ref ?? {}).length > 0) return false;
+  if (eras.length > 0 && !activeEra) return false;
+  return true;
 }
 
 function renderEntityView(slug: string): void {
@@ -324,6 +427,25 @@ function renderEntityView(slug: string): void {
 
   const isEncounterTable = frontmatter.type === "encounter-table" && (frontmatter.table?.length ?? 0) > 0;
 
+  const placementState: "idle" | "waiting" | "none" =
+    pendingPlacement?.slug === slug ? "waiting" : canPlaceOnMap(entity) ? "idle" : "none";
+  const placeOnMapHtml =
+    placementState === "idle"
+      ? `<section id="place-on-map">
+          <label>Place as:
+            <select id="place-kind">
+              <option value="burg">Town/City (burg)</option>
+              <option value="marker">Marker</option>
+            </select>
+          </label>
+          <button id="place-on-map-btn" type="button">Place on map</button>
+        </section>`
+      : placementState === "waiting"
+        ? `<section id="place-on-map">
+            <p class="muted">Click the map to place it… <button id="place-cancel-btn" type="button">Cancel</button></p>
+          </section>`
+        : "";
+
   content.innerHTML = `
     <header class="entity-header">
       <h1>${frontmatter.title}</h1>
@@ -342,6 +464,7 @@ function renderEntityView(slug: string): void {
         ${dbRef ? `<a href="#/new?title=${encodeURIComponent(frontmatter.title)}">Write a lore page for this ↗</a>` : ""}
       </div>
     </header>
+    ${placeOnMapHtml}
     ${renderObjectives(frontmatter.objectives)}
     ${frontmatter.resolution ? `<section class="resolution"><h3>Resolution</h3><p>${frontmatter.resolution}</p></section>` : ""}
     ${renderStatsBlock(frontmatter.stats, frontmatter.statBlockSystem)}
@@ -352,6 +475,15 @@ function renderEntityView(slug: string): void {
 
   el<HTMLButtonElement>("edit-btn")?.addEventListener("click", () => renderEditorView(slug));
   if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
+
+  el<HTMLButtonElement>("place-on-map-btn")?.addEventListener("click", () => {
+    const kind = el<HTMLSelectElement>("place-kind").value as PlacementKind;
+    void requestPlacement(slug, kind);
+  });
+  el<HTMLButtonElement>("place-cancel-btn")?.addEventListener("click", () => {
+    cancelPendingPlacement();
+    renderEntityView(slug);
+  });
 }
 
 function escapeForTextarea(text: string): string {
@@ -387,6 +519,7 @@ function renderEditorView(slug: string): void {
     <header class="entity-header">
       <h1>Editing: ${entity.frontmatter.title}</h1>
       <div class="editor-toolbar">
+        <label>Type: <select id="editor-type">${typeOptionsHtml(entity.frontmatter.type)}</select></label>
         <span id="editor-word-count" class="muted"></span>
         <label class="preview-toggle"><input type="checkbox" id="preview-toggle" checked /> Preview</label>
       </div>
@@ -420,7 +553,8 @@ function renderEditorView(slug: string): void {
 
   el<HTMLButtonElement>("cancel-btn").addEventListener("click", () => renderEntityView(slug));
   el<HTMLButtonElement>("save-btn").addEventListener("click", async () => {
-    await saveEntity(handle, textarea.value);
+    const selectedType = el<HTMLSelectElement>("editor-type").value;
+    await saveEntity(handle, patchFrontmatterType(textarea.value, selectedType));
     await reloadFromDirectory();
     renderEntityView(slug);
   });
@@ -444,16 +578,7 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
     <h1>Create "${title}"</h1>
     ${mapRefNote}
     <label>Type:
-      <select id="new-type">
-        <option value="place">place</option>
-        <option value="character">character</option>
-        <option value="faction">faction</option>
-        <option value="event">event</option>
-        <option value="item">item</option>
-        <option value="quest">quest</option>
-        <option value="encounter-table">encounter-table</option>
-        <option value="session-log">session-log</option>
-      </select>
+      <select id="new-type">${typeOptionsHtml("place")}</select>
     </label>
     <button id="create-btn" type="button">Create page</button>
   `;
@@ -554,6 +679,7 @@ function render(): void {
   else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
   else if (route.view === "quests") renderQuestBoardView();
   else if (route.view === "sessions") renderSessionLogView();
+  else if (route.view === "choose-world") renderChooseWorldView();
   else renderHomeView();
 }
 
@@ -648,6 +774,81 @@ function renderGraph(): void {
     .attr("dy", 4);
 }
 
+function sendToMapFrame(message: PlacementMessage): void {
+  el<HTMLIFrameElement>("map-panel-frame").contentWindow?.postMessage(message, location.origin);
+}
+
+/** `?seed=&width=&height=` for the currently connected map, so map.html regenerates the same map
+ *  instead of whatever it would otherwise default to (last locally-saved map, or a fresh random
+ *  one). Approximate, not exact: only reproduces the connected map if it was never hand-edited
+ *  after generation — see fetchConnectedMapInfo's doc comment. No connected map: plain "./map.html",
+ *  same as before this existed. */
+function mapFrameSrc(): string {
+  if (!connectedMap) return "./map.html";
+  const params = new URLSearchParams({ seed: connectedMap.seed });
+  if (connectedMap.width) params.set("width", String(connectedMap.width));
+  if (connectedMap.height) params.set("height", String(connectedMap.height));
+  return `./map.html?${params.toString()}`;
+}
+
+/** Opens the map panel, loading map.html into the iframe on first use, or reloading it if the
+ *  connected map has changed since it was last loaded. `onReady` runs once the frame is actually
+ *  able to receive postMessage calls — immediately if it's already loaded and current. */
+function openMapPanel(onReady?: () => void): void {
+  const mapFrame = el<HTMLIFrameElement>("map-panel-frame");
+  const key = connectedMap?.id;
+  if (!mapFrameLoaded || key !== mapFrameKey) {
+    mapFrameLoaded = true;
+    mapFrameKey = key;
+    if (onReady) mapFrame.addEventListener("load", onReady, { once: true });
+    mapFrame.src = mapFrameSrc();
+  } else if (onReady) {
+    onReady();
+  }
+  el<HTMLElement>("map-panel").removeAttribute("hidden");
+}
+
+function cancelPendingPlacement(): void {
+  if (!pendingPlacement) return;
+  sendToMapFrame({ type: PLACEMENT_CANCEL, requestId: pendingPlacement.requestId });
+  pendingPlacement = undefined;
+}
+
+async function requestPlacement(slug: string, kind: PlacementKind): Promise<void> {
+  const entity = byslug(slug);
+  if (!entity || !canPlaceOnMap(entity)) return;
+
+  const requestId = crypto.randomUUID();
+  pendingPlacement = { requestId, slug, era: activeEra ?? DEFAULT_ERA, kind };
+  renderEntityView(slug);
+  openMapPanel(() => sendToMapFrame({ type: PLACEMENT_REQUEST, requestId, kind }));
+}
+
+/** The map reports either a completed placement (write map_ref, close the panel) or a cancel
+ *  (Escape / toggled off on the map side — leave the panel open so the user can just try again). */
+async function handlePlacementMessage(event: MessageEvent): Promise<void> {
+  if (event.origin !== location.origin) return;
+  if (event.source !== el<HTMLIFrameElement>("map-panel-frame").contentWindow) return;
+  const data = event.data as PlacementMessage;
+  if (!pendingPlacement || data?.requestId !== pendingPlacement.requestId) return;
+
+  const { slug, era } = pendingPlacement;
+  pendingPlacement = undefined;
+
+  if (data.type === PLACEMENT_RESULT) {
+    const handle = handles.get(slug);
+    const raw = rawContents.get(slug);
+    if (handle && raw !== undefined) {
+      const mapRef: MapRef = { kind: data.kind, id: data.id, name: data.name, cell: data.cell };
+      await saveEntity(handle, insertMapRefBlock(raw, era, mapRef));
+      await reloadFromDirectory();
+    }
+    el<HTMLElement>("map-panel").setAttribute("hidden", "");
+  }
+
+  renderEntityView(slug);
+}
+
 function initToolbar(): void {
   el<HTMLInputElement>("search").addEventListener("input", event => {
     renderSidebar((event.target as HTMLInputElement).value);
@@ -678,7 +879,12 @@ function initToolbar(): void {
     render();
   });
 
-  el<HTMLButtonElement>("connect-db-btn").addEventListener("click", renderConnectDatabaseView);
+  el<HTMLButtonElement>("world-switcher-btn").addEventListener("click", () => void toggleWorldMenu());
+  document.addEventListener("click", event => {
+    const menu = el<HTMLElement>("world-menu");
+    const switcher = el<HTMLElement>("world-switcher");
+    if (!menu.hasAttribute("hidden") && !switcher.contains(event.target as Node)) menu.setAttribute("hidden", "");
+  });
 
   el<HTMLButtonElement>("toggle-graph-btn").addEventListener("click", () => {
     const panel = el<HTMLElement>("graph-panel");
@@ -694,21 +900,22 @@ function initToolbar(): void {
     if (event.target === el<HTMLElement>("graph-panel")) el<HTMLElement>("graph-panel").setAttribute("hidden", "");
   });
 
-  const mapFrame = el<HTMLIFrameElement>("map-panel-frame");
-  let mapFrameLoaded = false;
-  el<HTMLButtonElement>("toggle-map-btn").addEventListener("click", () => {
-    if (!mapFrameLoaded) {
-      mapFrame.src = "./map.html";
-      mapFrameLoaded = true;
-    }
-    el<HTMLElement>("map-panel").removeAttribute("hidden");
-  });
+  el<HTMLButtonElement>("toggle-map-btn").addEventListener("click", () => openMapPanel());
   el<HTMLButtonElement>("map-panel-close").addEventListener("click", () => {
     el<HTMLElement>("map-panel").setAttribute("hidden", "");
+    if (pendingPlacement) {
+      const slug = pendingPlacement.slug;
+      cancelPendingPlacement();
+      renderEntityView(slug);
+    }
   });
 }
 
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", () => {
+  cancelPendingPlacement();
+  render();
+});
+window.addEventListener("message", event => void handlePlacementMessage(event));
 initToolbar();
 render();
-void autoConnectToLatestMap();
+void connectToPersistedWorld();

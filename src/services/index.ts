@@ -1,9 +1,9 @@
 import { createRegistry } from "@/utils/registry";
 import "./platform";
-import "./assistant";
 import "./autosave";
 import "./era-switcher";
 import "./fonts";
+import "./placement-bridge";
 import "./url-params";
 import "./versioning";
 import "./wiki-panel";

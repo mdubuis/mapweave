@@ -10,7 +10,6 @@ import { tip } from "@/components/tooltips";
 import { zoomTo } from "@/components/zoom";
 import type { Burg } from "@/generators/burgs-generator";
 import { Services } from "@/services";
-import { toggleAssistant } from "@/services/assistant";
 import { getRequestedMapSize } from "@/services/map-size";
 import { ensureEl } from "@/utils/nodeUtils";
 
@@ -67,7 +66,6 @@ export async function generateMapOnLoad(config?: GenerationConfig): Promise<void
   Layers.drawAll();
   fitMapToScreen();
   focusOn();
-  toggleAssistant();
 }
 
 /** Apply the layer and viewport parameters once the map exists */

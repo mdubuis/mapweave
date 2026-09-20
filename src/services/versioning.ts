@@ -119,25 +119,17 @@ export async function cleanupData(): Promise<void> {
 function showUpdateWindow(storedVersion: string | null): void {
   localStorage.setItem("version", VERSION);
 
-  const changelog = "https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Changelog";
-  const reddit = "https://www.reddit.com/r/FantasyMapGenerator";
-  const discord = "https://discordapp.com/invite/X7E84HU";
-  const patreon = "https://www.patreon.com/azgaar";
-
-  alertMessage.innerHTML = /* html */ `The Fantasy Map Generator is updated up to version <strong>${VERSION}</strong>. This version is compatible with <a href="${changelog}" target="_blank">previous versions</a>, loaded save files will be auto-updated.
+  alertMessage.innerHTML = /* html */ `Mapweave is updated up to version <strong>${VERSION}</strong>. Loaded save files will be auto-updated.
     ${storedVersion ? "<span>In case of errors reload the page to update the code.</span>" : ""}
 
     <ul>
       <strong>Latest changes:</strong>
       ${latestPublicChanges.map(change => `<li>${change}</li>`).join("")}
-    </ul>
-
-    <p>Join our <a href="${discord}" target="_blank">Discord server</a> and <a href="${reddit}" target="_blank">Reddit community</a> to ask questions, share maps, discuss the Generator and Worldbuilding, report bugs and propose new features.</p>
-    <span><i>Thanks for all supporters on <a href="${patreon}" target="_blank">Patreon</a>!</i></span>`;
+    </ul>`;
 
   $("#alert").dialog({
     resizable: false,
-    title: "Fantasy Map Generator update",
+    title: "Mapweave update",
     width: "28em",
     position: { my: "center center-4em", at: "center", of: "svg" },
     buttons: {

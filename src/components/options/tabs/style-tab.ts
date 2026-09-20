@@ -420,15 +420,6 @@ const TEMPLATE = /* html */ `
             id="styleGridSizeFriendly"
             data-tip="Distance between grid cell centers (in map scale)"
           ></output>
-          <a
-            href="https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Scale-and-distance#grids"
-            target="_blank"
-          >
-            <span
-              data-tip="Open wiki article scale and distance to know about grid scale"
-              class="icon-info-circled pointer"
-            ></span>
-          </a>
         </td>
       </tr>
       <tr data-tip="Shift the element by axes">

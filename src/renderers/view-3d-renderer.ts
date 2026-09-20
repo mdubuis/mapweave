@@ -865,10 +865,9 @@ async function newGlobe(canvas: HTMLCanvasElement) {
 
   // scene
   scene = new Three.Scene();
-  scene.background = new Three.TextureLoader().load(
-    "https://i0.wp.com/azgaar.files.wordpress.com/2019/10/stars-1.png",
-    render
-  );
+  // No starfield texture: the previous one was hosted on Azgaar's own server, no replacement
+  // asset bundled yet — falls back to a plain dark background instead of an empty/broken texture
+  scene.background = new Three.Color(0x0b0e14);
 
   // Renderer
   Renderer = new Three.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });

@@ -16,7 +16,6 @@ import { isAutoBurgLimit } from "@/generators/burgs-generator";
 import { CULTURE_SETS, Cultures } from "@/generators/cultures-generator";
 import { Emblems } from "@/generators/emblems-generator";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
-import { toggleAssistant } from "@/services/assistant";
 import { copyMapURL } from "@/services/url-params";
 import { applyOption, ensureEl, findEl } from "@/utils/nodeUtils";
 import { minmax, rn } from "@/utils/numberUtils";
@@ -131,12 +130,6 @@ const OPTION_BINDINGS: Record<string, OptionBinding> = {
     write: (o, value) => (o.app.ui.tooltipSize = value),
     parse: Number,
     effect: changeTooltipSize
-  }),
-  azgaarAssistant: option({
-    read: o => o.app.ui.assistant,
-    write: (o, value) => (o.app.ui.assistant = value),
-    parse: value => (value === "hide" ? "hide" : "show"),
-    effect: value => toggleAssistant(value === "show")
   }),
   speakerVoice: option({
     read: o => o.app.ui.speakerVoice,
@@ -441,16 +434,6 @@ const TEMPLATE = /* html */ `
         </select>
       </td>
       <td></td>
-    </tr>
-    <tr data-tip="Toggle Azgaar Assistant (help bubble on the bottom right corner)">
-      <td></td>
-      <td>Azgaar assistant</td>
-      <td>
-        <select id="azgaarAssistant" data-option="azgaarAssistant">
-          <option value="show" selected>Show</option>
-          <option value="hide">Hide</option>
-        </select>
-      </td>
     </tr>
     <tr data-tip="Select speech synthesis voice to pronounce generated names">
       <td></td>

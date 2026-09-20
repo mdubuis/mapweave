@@ -4,6 +4,7 @@
  * only adds the ability to read/write those same files live from a user-picked local folder.
  */
 import { parseEntityFile } from "./entities";
+import { buildMapRefBlockLines } from "./map-ref-patch";
 import { DEFAULT_ERA, type MapRef, type WikiEntity } from "./types";
 
 export interface LiveEntitySource {
@@ -89,11 +90,7 @@ export async function createEntity(
   const slug = slugify(title);
   const folder = await dir.getDirectoryHandle(`${type}s`, { create: true });
   const handle = await folder.getFileHandle(`${slug}.md`, { create: true });
-  const mapRefBlock = mapRef
-    ? `map_ref:\n  ${era ?? DEFAULT_ERA}:\n    kind: ${mapRef.kind}\n    id: ${mapRef.id}\n    name: ${mapRef.name}\n${
-        mapRef.cell !== undefined ? `    cell: ${mapRef.cell}\n` : ""
-      }`
-    : "";
+  const mapRefBlock = mapRef ? `${buildMapRefBlockLines(era ?? DEFAULT_ERA, mapRef).join("\n")}\n` : "";
   await saveEntity(handle, `---\ntitle: ${title}\ntype: ${type}\n${mapRefBlock}${scenarioTemplateBlock(type)}---\n\n`);
   return { slug };
 }

@@ -33,6 +33,9 @@ function addOnClick(event: MouseEvent, baseMarker?: Marker): void {
   const selectedConfig = Markers.getConfig().find(({ type }) => type === selectedType);
   const template = baseMarker || selectedConfig || { icon: "❓", type: "custom" };
   const marker = Markers.add({ ...template, x: rn(point[0], 2), y: rn(point[1], 2), cell } as Marker);
+  window.dispatchEvent(
+    new CustomEvent("marker:created", { detail: { id: marker.i, name: marker.name, cell: marker.cell } })
+  );
   selectedConfig?.add(marker, cell);
 
   Layers.draw("markers");
@@ -49,4 +52,11 @@ function unpressProxyButtons(): void {
   document.getElementById("markersAddFromOverview")?.classList.remove("pressed");
 }
 
-export const MarkerCreator = { toggle };
+function stop(): void {
+  if (findEl("addMarker")?.classList.contains("pressed")) {
+    unpressProxyButtons();
+    stopMapPlacement();
+  }
+}
+
+export const MarkerCreator = { toggle, stop };

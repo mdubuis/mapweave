@@ -24,8 +24,12 @@
           <button id="toggle-map-btn" type="button">View Map</button>
           <button id="open-folder-btn" type="button">Open wiki folder…</button>
           <span id="live-indicator"></span>
-          <button id="connect-db-btn" type="button">Connect to map database…</button>
-          <span id="db-indicator"></span>
+          <div id="world-switcher">
+            <button id="world-switcher-btn" type="button" data-tip="Switch to a different world">
+              <span id="world-switcher-label">Choose a world…</span>
+            </button>
+            <div id="world-menu" hidden></div>
+          </div>
         </div>
         <select id="era-select" hidden data-tip="Filter the wiki to one era of the timeline"></select>
         <button id="new-page-btn" type="button">+ New page</button>

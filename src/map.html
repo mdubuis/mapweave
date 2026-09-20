@@ -3,42 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Azgaar's Fantasy Map Generator</title>
-    <meta name="application-name" content="Azgaar's Fantasy Map Generator" />
-    <meta name="author" content="Azgaar" />
+    <title>Mapweave</title>
+    <meta name="application-name" content="Mapweave" />
+    <meta name="author" content="Mapweave" />
     <meta
       name="description"
-      content="Free web app that helps fantasy writers, game masters, and cartographers create and edit fantasy maps"
+      content="A worldbuilding platform — a generated fantasy map and a cross-linked lore wiki in one app"
     />
-    <meta property="og:url" content="https://azgaar.github.io/Fantasy-Map-Generator" />
-    <meta property="og:title" content="Azgaar's Fantasy Map Generator" />
+    <meta property="og:title" content="Mapweave" />
     <meta
       property="og:description"
-      content="Free web app that helps fantasy writers, game masters, and cartographers create and edit fantasy maps"
+      content="A worldbuilding platform — a generated fantasy map and a cross-linked lore wiki in one app"
     />
     <meta property="og:image" content="images/preview.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta property="twitter:domain" content="azgaar.github.io" />
-    <meta property="twitter:url" content="https://azgaar.github.io/Fantasy-Map-Generator/" />
-    <meta name="twitter:title" content="Azgaar's Fantasy Map Generator" />
-    <meta
-      name="twitter:description"
-      content="Free web app that helps fantasy writers, game masters, and cartographers create and edit fantasy maps"
-    />
-    <meta name="twitter:image" content="images/preview.png" />
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VJL3J26W7R"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag() {
-        dataLayer.push(arguments);
-      }
-      gtag("js", new Date());
-      gtag("config", "G-VJL3J26W7R");
-    </script>
     <link rel="icon" type="image/png" href="images/icons/favicon-32x32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="images/icons/favicon-16x16.png" sizes="16x16" />
     <link rel="apple-touch-icon" href="images/icons/maskable_icon_x192.png" />
-    <link rel="canonical" href="https://azgaar.github.io/Fantasy-Map-Generator/" />
     <link rel="manifest" href="manifest.webmanifest" />
     <!-- inline css for loading screen -->
     <style type="text/css">
@@ -345,8 +325,8 @@
         <use href="#defs-compass-rose" x="50%" y="50%" />
       </svg>
       <div id="loading-typography">
-        <div id="titleName">Azgaar's</div>
-        <div id="title">Fantasy Map Generator</div>
+        <div id="titleName"></div>
+        <div id="title">Mapweave</div>
         <div id="versionText">‎ ‎</div>
         <p id="loading-text">LOADING<span>.</span><span>.</span><span>.</span></p>
       </div>
@@ -413,13 +393,6 @@
         </button>
       </div>
     </div>
-    <button id="helpAssistantBubble" type="button" data-tip="Click to ask the Assistant"
-      aria-label="Ask the Assistant" aria-expanded="false" style="display: none">
-      <span class="helpAssistantBubbleBadge">
-        <span class="icon-help"></span>
-        <span class="helpAssistantBubbleMinimize"></span>
-      </span>
-    </button>
     <div id="dialogs">
       <div id="styleSaver" class="dialog stable textual" style="display: none">
         <div id="styleSaverHeader" style="padding: 2px 0">
@@ -568,9 +541,7 @@
           <button onclick="window.Services.ExportMap.saveGeoJsonZones()" data-tip="Download zones data in GeoJSON format">zones</button>
         </div>
         <p>
-          GeoJSON format is used in GIS tools such as QGIS. Check out
-          <a href="https://github.com/Azgaar/Fantasy-Map-Generator/wiki/GIS-data-export" target="_blank">wiki-page</a>
-          for guidance.
+          GeoJSON format is used in GIS tools such as QGIS.
         </p>
         <div style="margin: 1em 0 0.3em; font-weight: bold">Export To JSON</div>
         <div>

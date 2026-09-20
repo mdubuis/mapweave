@@ -27,7 +27,7 @@ import { GraphOverride } from "@/generators/graph-override";
 import { removeEmblem } from "@/renderers/draw-emblems";
 import { moveCircle, removeCircle } from "@/renderers/overlays/brush-circle";
 import { downloadFile, getFileName, uploadFile } from "@/utils";
-import { ensureEl, findEl, generateSeed, getPointer, last, lim, link, minmax, rn, unique } from "../utils";
+import { ensureEl, findEl, generateSeed, getPointer, last, lim, minmax, rn, unique } from "../utils";
 import { createBrushStroke } from "../utils/brushUtils";
 import type { PromptOptions } from "../utils/commonUtils";
 
@@ -135,12 +135,6 @@ function renderTemplateEditor(): void {
           onclick="
             openURL('https://cartographyassets.com/asset-category/specific-assets/azgaars-generator/templates')
           "
-        ></button>
-        <button
-          id="templateTutorial"
-          data-tip="Open Template Editor Tutorial"
-          class="icon-info"
-          onclick="wiki('Heightmap-template-editor')"
         ></button>
         <label
           data-tip="Enter seed for template to generate the same heightmap each time"
@@ -306,11 +300,7 @@ function showModeDialog(tool?: string): void {
     <p><i>Erase</i> mode also allows you Convert an Image into a heightmap or use Template Editor.</p>
     <p>You can <i>keep</i> the data, but you won't be able to change the coastline.</p>
     <p>Try <i>risk</i> mode to change the coastline and keep the data. The data will be restored as much as possible, but it can cause unpredictable errors.</p>
-    <p>Please <span class="pseudoLink" onclick="window.Services.Save.saveMap('machine')">save the map</span> before editing the heightmap!</p>
-    <p style="margin-bottom: 0">Check out ${link(
-      "https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Heightmap-customization",
-      "wiki"
-    )} for guidance.</p>`;
+    <p style="margin-bottom: 0">Please <span class="pseudoLink" onclick="window.Services.Save.saveMap('machine')">save the map</span> before editing the heightmap!</p>`;
 
   $("#alert").dialog({
     resizable: false,

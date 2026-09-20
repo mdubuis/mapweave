@@ -8,7 +8,6 @@ import { closeDialogs } from "./dialog/dialog-helpers";
 import { getLayerByShortcut } from "./options/tabs/layers-tab";
 import { changeMapZoom, panMap, setMapZoom } from "./zoom";
 
-// Hotkeys, see github.com/Azgaar/Fantasy-Map-Generator/wiki/Hotkeys
 document.addEventListener("keydown", handleKeydown);
 document.addEventListener("keyup", handleKeyup);
 

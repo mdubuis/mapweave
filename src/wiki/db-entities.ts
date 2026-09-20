@@ -51,6 +51,28 @@ export async function fetchAvailableMaps(apiBase: string): Promise<MapSummary[]>
   return response.json();
 }
 
+export interface ConnectedMapInfo {
+  id: number;
+  seed: string;
+  /** From `facts.graph` — present when the map was imported with its settings JSON, or generated
+   *  server-side (see server/src/routes/maps.mjs's /api/maps/generate). Absent otherwise: a bare
+   *  Pack Cells-only browser import has no settings export to read these from. */
+  width?: number;
+  height?: number;
+}
+
+/** Just enough to point map.html's `?seed=&width=&height=` at the same map the wiki is showing —
+ *  see requestPlacement/openMapPanel in wiki-main.ts. Not a full reconstruction of the stored map:
+ *  regenerating from seed reproduces it only if it was never hand-edited after generation (see
+ *  the fidelity caveat in server/db/schema.sql). */
+export async function fetchConnectedMapInfo(apiBase: string, mapId: number): Promise<ConnectedMapInfo> {
+  const response = await fetch(`${apiBase}/api/maps/${mapId}`);
+  if (!response.ok) throw new Error(`GET /api/maps/${mapId} failed: ${response.status}`);
+  const row = await response.json();
+  const graph = row.facts?.graph as { width?: number; height?: number } | undefined;
+  return { id: row.id, seed: row.seed, width: graph?.width, height: graph?.height };
+}
+
 function toWikiEntity(mapId: number, node: TreeNode, parentTitle?: string): WikiEntity {
   const slug = `db-${mapId}-${node.kind}-${node.id}`;
   const summaryParts = [

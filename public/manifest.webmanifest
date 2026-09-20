@@ -2,12 +2,12 @@
   "background_color": "#fff",
   "display": "standalone",
   "orientation": "any",
-  "name": "Azgaar's Fantasy Map Generator",
-  "short_name": "Azgaar's Fantasy Map Generator",
-  "description": "Web application generating interactive and highly customizable maps",
+  "name": "Mapweave",
+  "short_name": "Mapweave",
+  "description": "A worldbuilding platform — a generated fantasy map and a cross-linked lore wiki in one app",
   "scope": "/Fantasy-Map-Generator/",
   "start_url": "/Fantasy-Map-Generator/?source=pwa",
-  "url": "https://azgaar.github.io/Fantasy-Map-Generator",
+  "url": "https://github.com/mdubuis/mapweave",
   "icons": [
     {
       "src": "images/icons/icon_x512.png",

@@ -51,4 +51,7 @@ export function stopMapPlacement(): void {
     });
   applyDefaultViewboxEvents();
   clearMainTip();
+  // Fires on every stop (successful placement or cancel) — src/services/placement-bridge.ts tells
+  // the two apart by whether its own pending-request state was already cleared by a *:created event.
+  window.dispatchEvent(new CustomEvent("map:placement-stopped"));
 }

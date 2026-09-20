@@ -1,18 +1,18 @@
 {
   "name": "fantasy-map-generator",
-  "productName": "Fantasy Map Generator",
+  "productName": "Mapweave",
   "version": "1.152.2",
-  "description": "Azgaar's _Fantasy Map Generator_ is a free web application that helps fantasy writers, game masters, and cartographers create and edit fantasy maps.",
-  "homepage": "https://github.com/Azgaar/Fantasy-Map-Generator#readme",
+  "description": "Mapweave is a worldbuilding platform — a generated fantasy map and a cross-linked lore wiki in one app.",
+  "homepage": "https://github.com/mdubuis/mapweave#readme",
   "bugs": {
-    "url": "https://github.com/Azgaar/Fantasy-Map-Generator/issues"
+    "url": "https://github.com/mdubuis/mapweave/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Azgaar/Fantasy-Map-Generator.git"
+    "url": "git+https://github.com/mdubuis/mapweave.git"
   },
   "license": "MIT",
-  "author": "Azgaar",
+  "author": "mdubuis",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/pwa-precache.mjs",

@@ -35,7 +35,7 @@ export const BURG_ICON_SELECTOR = "svg[id^='burg'][data-id], svg[id^='anchor'][d
 
 type BurgIconAttrs = Record<string, string | number | boolean | null | undefined>;
 
-function buildIcon(
+export function buildIcon(
   id: number,
   group: string,
   icon: string,
@@ -144,6 +144,33 @@ export function update(burgs: Burg[]): void {
   }
 }
 
+/** Resizes an already-rendered burg/anchor icon's existing DOM node in place — same visual result
+ *  as `marker.setIcon(buildIcon(...))` (of buildIcon's HTML, only the svg's width/height/viewBox,
+ *  the g's font-size, and the use element's x/y actually depend on size — see buildIcon) without
+ *  tearing the node down and rebuilding it from an HTML string on every zoom level change, which is
+ *  what setIcon does internally and is expensive across hundreds of icons. Returns false if the
+ *  marker has no element yet (not attached to the DOM) — the caller should fall back to setIcon. */
+export function updateIconSize(marker: L.Marker, size: number): boolean {
+  const el = marker.getElement();
+  const svg = el?.firstElementChild as SVGSVGElement | null | undefined;
+  const g = svg?.firstElementChild as SVGGElement | null | undefined;
+  const use = g?.firstElementChild as SVGUseElement | null | undefined;
+  if (!el || !svg || !g || !use) return false;
+
+  const box = size * 2;
+  el.style.width = `${box}px`;
+  el.style.height = `${box}px`;
+  el.style.marginLeft = `${-size}px`;
+  el.style.marginTop = `${-size}px`;
+  svg.setAttribute("width", String(box));
+  svg.setAttribute("height", String(box));
+  svg.setAttribute("viewBox", `0 0 ${box} ${box}`);
+  g.setAttribute("font-size", String(size));
+  use.setAttribute("x", String(size));
+  use.setAttribute("y", String(size));
+  return true;
+}
+
 /** Recompute every burg/anchor icon's apparent size for the current zoom — burg icons have no
  *  per-group "rescale" toggle (unlike markers): they always scaled with zoom in the old renderer,
  *  implicitly, as part of #viewbox's own shared transform. Call on zoom end, not per frame; skips
@@ -157,12 +184,14 @@ export function refreshSizeForZoom(): void {
   for (const [id, marker] of primaryMarkers) {
     const meta = primaryMeta.get(id);
     if (!meta) continue;
-    marker.setIcon(buildIcon(id, meta.group, meta.icon, zoom * meta.baseSize, meta.attrs, false));
+    const size = zoom * meta.baseSize;
+    if (!updateIconSize(marker, size)) marker.setIcon(buildIcon(id, meta.group, meta.icon, size, meta.attrs, false));
   }
   for (const [id, marker] of anchorMarkers) {
     const meta = anchorMeta.get(id);
     if (!meta) continue;
-    marker.setIcon(buildIcon(id, meta.group, meta.icon, zoom * meta.baseSize, meta.attrs, true));
+    const size = zoom * meta.baseSize;
+    if (!updateIconSize(marker, size)) marker.setIcon(buildIcon(id, meta.group, meta.icon, size, meta.attrs, true));
   }
 }
 

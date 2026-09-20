@@ -49,7 +49,12 @@ export default async function mapsRoutes(app) {
   app.post("/api/maps/generate", async (request, reply) => {
     const { seed, width, height, density, name } = request.body ?? {};
     const packExport = await runGeneration({ seed, width, height, density });
-    const result = await withTransaction(client => importPack(client, { packExport, name }));
+    // importPack() only persists width/height/seed into `facts` from an explicit settingsExport —
+    // the browser-import path gets that from an optional Minimal JSON export; this path has the
+    // resolved values right here (packExport.info, see pack-to-json.ts), so pass them the same way
+    // rather than leaving `facts` empty for every server-generated map.
+    const settingsExport = { options: { map: { seed: packExport.info.seed, graph: { width: packExport.info.width, height: packExport.info.height } } } };
+    const result = await withTransaction(client => importPack(client, { packExport, settingsExport, name }));
     return reply.code(201).send(result);
   });
 

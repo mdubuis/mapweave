@@ -3,7 +3,7 @@ import { waitForMap } from "./wait-for-map";
 
 // Tour step titles in order — used to verify we're on the right step.
 const STEP_TITLES = [
-  "Welcome to Fantasy Map Generator", // 0
+  "Welcome to Mapweave", // 0
   "Navigate the Map",                  // 1
   "Hover Tooltips",                    // 2
   "Open the Options Menu",             // 3

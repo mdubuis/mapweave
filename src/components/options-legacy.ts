@@ -114,7 +114,6 @@ export function adoptLegacyOptions(): Record<string, unknown> | null {
   num("transparency", "app.ui.transparency");
   str("themeColor", "app.ui.themeColor");
   str("speakerVoice", "app.ui.speakerVoice");
-  str("azgaarAssistant", "app.ui.assistant");
   str("shapeRendering", "app.rendering");
   str("viewportRedraw", "app.viewportRedraw");
   str("onloadBehavior", "app.onLoad");

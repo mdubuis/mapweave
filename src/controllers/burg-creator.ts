@@ -39,6 +39,11 @@ function addOnClick(event: MouseEvent): void {
   }
 
   const burgId = Burgs.add(point);
+  window.dispatchEvent(
+    new CustomEvent("burg:created", {
+      detail: { id: burgId, name: pack.burgs[burgId].name, cell: pack.burgs[burgId].cell }
+    })
+  );
   redrawEmblem("burg", burgId);
   refreshEditors();
   Layers.draw("burgIcons", "labels", "routes");

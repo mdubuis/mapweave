@@ -94,7 +94,7 @@ function getGridDataJson(): string {
 function getMapInfo() {
   return {
     version: VERSION,
-    description: "Azgaar's Fantasy Map Generator output: azgaar.github.io/Fantasy-map-generator",
+    description: "Mapweave output: github.com/mdubuis/mapweave",
     exportedAt: new Date().toISOString(),
     mapName: options.map.lore.name,
     width: options.map.graph.width,

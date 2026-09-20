@@ -96,7 +96,6 @@ class OptionsModel {
           tooltipSize: 14,
           themeColor: DEFAULT_THEME_COLOR,
           transparency: 5,
-          assistant: "show",
           speakerVoice: ""
         },
         export: { pngResolution: 1, tiles: { cols: 8, rows: 8, scale: 1 } },

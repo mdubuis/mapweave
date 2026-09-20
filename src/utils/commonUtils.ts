@@ -192,14 +192,6 @@ export const openURL = (url: string): void => {
 };
 
 /**
- * Open project wiki-page
- * @param page - The wiki page name/path to open
- */
-export const wiki = (page: string): void => {
-  window.open(`https://github.com/Azgaar/Fantasy-Map-Generator/wiki/${page}`, "_blank");
-};
-
-/**
  * Wrap URL into html a element
  * @param URL - The URL for the link
  * @param description - The link text/description
@@ -379,7 +371,6 @@ declare global {
     debounce: typeof debounce;
     parseError: typeof parseError;
     openURL: typeof openURL;
-    wiki: typeof wiki;
     link: typeof link;
     isCtrlClick: typeof isCtrlClick;
   }

@@ -18,8 +18,7 @@ import {
   P,
   Pint,
   rand,
-  rn,
-  wiki
+  rn
 } from "../utils";
 
 type Side = "attackers" | "defenders";
@@ -407,7 +406,6 @@ function renderDialog(): void {
           data-tip="Cancel battle: roll back results and close the screen"
           class="icon-cancel"
         ></button>
-        <button id="battleWiki" data-tip="Open Battle Simulation Tutorial" class="icon-info"></button>
       </div>
     </div>
     <div id="regimentSelectorScreen" class="dialog">
@@ -447,7 +445,6 @@ function renderDialog(): void {
   ensureEl("battleRun").addEventListener("click", () => runBattle());
   ensureEl("battleApply").addEventListener("click", () => applyResults());
   ensureEl("battleCancel").addEventListener("click", () => cancelResults());
-  ensureEl("battleWiki").addEventListener("click", () => wiki("Battle-Simulator"));
 
   ensureEl("battlePhase_attackers").addEventListener("click", event => toggleChange(event));
   ensureEl("battlePhase_attackers").nextElementSibling!.addEventListener("click", event =>

@@ -23,7 +23,7 @@ const PROVIDERS: Record<Provider, { keyLink: string; generate: (options: Generat
     generate: generateWithAnthropic
   },
   ollama: {
-    keyLink: "https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Ollama-text-generation",
+    keyLink: "https://ollama.com",
     generate: generateWithOllama
   }
 };

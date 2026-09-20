@@ -16,7 +16,7 @@ import { Controllers } from "@/controllers";
 import type { State } from "@/generators/states-generator";
 import type { MilitaryUnit } from "@/types/Military";
 import { downloadFile, getFileName, isImageIcon } from "@/utils";
-import { capitalize, ensureEl, rn, sanitizeId, si, wiki } from "../utils";
+import { capitalize, ensureEl, rn, sanitizeId, si } from "../utils";
 
 const dialogId = "militaryOverview" as const;
 const position = { my: "right top", at: "right-10 top+10", of: "svg", collision: "fit" };
@@ -95,7 +95,6 @@ function renderDialog(): void {
           data-tip="Save military-related data as a text file (.csv)"
           class="icon-download"
         ></button>
-        <button id="militaryWiki" data-tip="Open Military Forces Tutorial" class="icon-info"></button>
       </div>
     </div>`;
   ensureEl("dialogs").insertAdjacentHTML("beforeend", editorHtml);
@@ -110,7 +109,6 @@ function renderDialog(): void {
   ensureEl("militaryRegimentsList").addEventListener("click", () => openRegimentsOverview(-1));
   ensureEl("militaryOverviewRecalculate").addEventListener("click", militaryRecalculate);
   ensureEl("militaryExport").addEventListener("click", downloadMilitaryData);
-  ensureEl("militaryWiki").addEventListener("click", () => wiki("Military-Forces"));
 
   body.addEventListener("change", event => {
     const el = event.target as HTMLInputElement;

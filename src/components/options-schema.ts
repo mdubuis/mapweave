@@ -194,7 +194,6 @@ export const optionsSchema = z.strictObject({
       tooltipSize: positive,
       themeColor: hexColor,
       transparency: percent,
-      assistant: z.enum(["show", "hide"]),
       speakerVoice: z.string() // the index into the browser's voice list, "" until one is picked
     }),
     export: z.strictObject({

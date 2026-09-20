@@ -74,11 +74,31 @@ const ID_PREFIX = "marker";
 
 // world-space top-left corner, in the same convention the old renderer used — old code that reads
 // these back off the element (highlightElement()'s getBBox() fallback for an <svg> tag) keeps working
-function buildIcon(marker: Marker, size: number): L.DivIcon {
+export function buildIcon(marker: Marker, size: number): L.DivIcon {
   const x = rn(marker.x - size / 2, 1);
   const y = rn(marker.y - size, 1);
   const html = /* html */ `<svg id="${ID_PREFIX}${marker.i}" viewBox="0 0 30 30" width="${size}" height="${size}" x="${x}" y="${y}">${getMarkerContent(marker)}</svg>`;
   return L.divIcon({ html, className: "", iconSize: [size, size], iconAnchor: [size / 2, size] });
+}
+
+/** Resizes an already-rendered marker icon's existing DOM node in place — same visual result as
+ *  `leafletMarker.setIcon(buildIcon(...))`. The artwork's own viewBox is a fixed "0 0 30 30" (see
+ *  buildIcon), so only the svg's width/height need to change to scale it — no HTML string rebuild
+ *  or DOM node replacement, which is what setIcon does internally and is expensive across hundreds
+ *  of markers. Returns false if the marker has no element yet (not attached to the DOM) — the
+ *  caller should fall back to setIcon. */
+export function updateIconSize(marker: L.Marker, size: number): boolean {
+  const el = marker.getElement();
+  const svg = el?.firstElementChild as SVGSVGElement | null | undefined;
+  if (!el || !svg) return false;
+
+  el.style.width = `${size}px`;
+  el.style.height = `${size}px`;
+  el.style.marginLeft = `${-size / 2}px`;
+  el.style.marginTop = `${-size}px`;
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  return true;
 }
 
 /** The marker id encoded in a rendered `<svg id="marker{i}">`, or the closest ancestor one — the one
@@ -92,6 +112,11 @@ export function markerIdFromElement(el: Element): number | null {
 }
 
 const markers = new Map<number, L.Marker>();
+/** Same keys as `markers`, alongside the source Marker each was built from — refreshSizeForZoom
+ *  reads size off these instead of re-scanning/re-mapping the whole pack.markers array on every
+ *  zoom level change. Repopulated wholesale on every update(), so it can't go stale for longer than
+ *  one full redraw. */
+const markerData = new Map<number, Marker>();
 let visibleMarkerIds: Set<number> | null = null;
 let editedMarkerId: number | null = null;
 let editedDragEnd: ((x: number, y: number) => void) | undefined;
@@ -106,6 +131,7 @@ export function update(allMarkers: Marker[]): void {
   const group = getFeatureLayerGroup(PANE_NAME, Z_INDEX);
   group.clearLayers();
   markers.clear();
+  markerData.clear();
 
   const rescale = styles.markers.options.rescale;
   const anyPinned = allMarkers.some(m => m.pinned);
@@ -125,6 +151,7 @@ export function update(allMarkers: Marker[]): void {
     });
     if (isEdited) wireDrag(leafletMarker);
     markers.set(marker.i, leafletMarker);
+    markerData.set(marker.i, marker);
     group.addLayer(leafletMarker);
   }
 }
@@ -141,8 +168,10 @@ let lastZoomSized: number | undefined;
 /** Recompute every marker's icon size for the current zoom — every marker needs this, not just
  *  rescale-enabled ones (see getMarkerSize), since apparent size always depends on zoom now that
  *  there's no implicit #viewbox-style scale transform doing it automatically. Call on zoom end, not
- *  per frame: rebuilding a divIcon means replacing the marker's DOM node. Skips the rebuild
- *  entirely when the zoom level hasn't actually changed (e.g. a pure pan) */
+ *  per frame. Resizes each icon's existing DOM node in place (see updateIconSize) rather than
+ *  rebuilding it, and reads marker data off markerData (populated once per update()) rather than
+ *  re-scanning pack.markers here. Skips entirely when the zoom level hasn't actually changed (e.g.
+ *  a pure pan) */
 export function refreshSizeForZoom(): void {
   if (markers.size === 0) return;
   const zoom = getLeafletMap().getZoom();
@@ -150,11 +179,11 @@ export function refreshSizeForZoom(): void {
   lastZoomSized = zoom;
 
   const rescale = styles.markers.options.rescale;
-  const byId = new Map(pack.markers.map((m: Marker) => [m.i, m]));
   for (const [id, leafletMarker] of markers) {
-    const marker = byId.get(id);
+    const marker = markerData.get(id);
     if (!marker) continue;
-    leafletMarker.setIcon(buildIcon(marker, getMarkerSize(marker, rescale, zoom)));
+    const size = getMarkerSize(marker, rescale, zoom);
+    if (!updateIconSize(leafletMarker, size)) leafletMarker.setIcon(buildIcon(marker, size));
   }
 }
 
@@ -172,4 +201,5 @@ export function setEditedMarker(markerId: number | null, onDragEnd?: (x: number,
 export function clear(): void {
   getFeatureLayerGroup(PANE_NAME, Z_INDEX).clearLayers();
   markers.clear();
+  markerData.clear();
 }

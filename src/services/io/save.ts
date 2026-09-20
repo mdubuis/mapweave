@@ -27,7 +27,7 @@ async function saveMap(method: SaveMethod): Promise<void> {
   } catch (error) {
     ERROR && console.error(error);
     alertMessage.innerHTML = /* html */ `An error occurred while saving the map. If the issue persists, please copy the message below and report it on ${link(
-      "https://github.com/Azgaar/Fantasy-Map-Generator/issues",
+      "https://github.com/mdubuis/mapweave/issues",
       "GitHub"
     )}. <p id="errorBox">${parseError(error as Error)}</p>`;
 
@@ -52,7 +52,7 @@ async function saveMap(method: SaveMethod): Promise<void> {
 function prepareMapData(): string {
   const date = new Date();
   const dateString = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-  const license = "File can be loaded in azgaar.github.io/Fantasy-Map-Generator";
+  const license = "Mapweave map file";
   const params = [
     VERSION,
     license,

@@ -18,8 +18,7 @@ import {
   openURL,
   parseError,
   speak,
-  throttle,
-  wiki
+  throttle
 } from "./commonUtils";
 import { drawCellsValue, drawPath, drawPoint, drawPolygons, drawRouteConnections } from "./debugUtils";
 import { downloadFile, getFileName, isImageIcon, sanitizeSvgIcon, svgToDataUri, uploadFile } from "./fileUtils";
@@ -109,7 +108,6 @@ declare global {
 window.debounce = debounce;
 window.parseError = parseError;
 window.openURL = openURL;
-window.wiki = wiki;
 window.link = link;
 window.isCtrlClick = isCtrlClick;
 
@@ -232,6 +230,5 @@ export {
   toHEX,
   trimVowels,
   unique,
-  uploadFile,
-  wiki
+  uploadFile
 };

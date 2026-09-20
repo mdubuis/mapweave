@@ -2,8 +2,6 @@
 import { alertDialog, closeDialogs, confirmationDialog } from "@/components/dialog/dialog-helpers";
 import { Layers } from "@/components/layers";
 import { Pins } from "@/components/pins";
-import { showDataTip } from "@/components/tooltips";
-import { Controllers } from "@/controllers";
 import { Services } from "@/services";
 import { isElectron, isLocalhost } from "@/services/platform";
 import { ensureEl, findEl } from "@/utils";
@@ -18,7 +16,6 @@ export function initShell(): void {
   document.addEventListener("touchstart", onTitlebarButtonTouch, { capture: true, passive: true });
   addDragToUpload();
   initTourPromptButton();
-  initHelpAssistantBubble();
 
   if (!isLocalhost() && !isElectron()) window.onbeforeunload = () => "Are you sure you want to navigate away?";
   if (isElectron()) removeWebOnlyControls();
@@ -31,15 +28,6 @@ function onResize(): void {
     if (Pins.rolls("mapHeight") && window.innerHeight > 0) config.generation.graph.height = window.innerHeight;
   });
   fitMapToScreen();
-}
-
-/** The assistant's call button: always in the markup, shown only when the preference says so */
-function initHelpAssistantBubble(): void {
-  const bubble = findEl("helpAssistantBubble");
-  if (!bubble) return;
-
-  bubble.addEventListener("click", () => Controllers.HelpAssistant.toggle());
-  bubble.addEventListener("mouseover", showDataTip);
 }
 
 /**
@@ -148,18 +136,16 @@ function initTourPromptButton(): void {
 export function warnIfServerless(): boolean {
   if (location.hostname) return false;
 
-  const wiki = "https://github.com/Azgaar/Fantasy-Map-Generator/wiki/Run-FMG-locally";
   alertDialog({
     title: "Loading error",
     width: "28em",
-    message: /* html */ `Fantasy Map Generator cannot run serverless. Follow the <a href="${wiki}" target="_blank">instructions</a> on how you can easily run a local web-server`
+    message: /* html */ `Mapweave cannot run serverless. Run a local web server (e.g. <code>npm run dev</code>) and open it from there instead of opening the file directly.`
   });
   return true;
 }
 
 function removeWebOnlyControls(): void {
   findEl("getAppButton")?.remove();
-  findEl("azgaarAssistant")?.closest("tr")?.remove();
   findEl("saveToDropboxButton")?.remove();
   findEl("loadFromDropbox")?.remove();
 }
