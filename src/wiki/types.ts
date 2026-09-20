@@ -53,6 +53,10 @@ export interface WikiFrontmatter {
   number?: number;
   /** Session-log entities: free-form date string (in-fiction or real-world), display only */
   date?: string;
+  /** Hides this whole entity in player view (see wiki-main.ts's viewMode) — a local display filter
+   *  for the GM to flip before sharing their screen, not real access control. A `:::secret` block
+   *  in the body (see wiki/secrets.ts) hides part of an otherwise-visible page instead of all of it. */
+  secret?: boolean;
   [key: string]: unknown;
 }
 

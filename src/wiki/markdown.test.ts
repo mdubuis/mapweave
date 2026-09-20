@@ -55,3 +55,42 @@ describe("renderMarkdown", () => {
     expect(renderMarkdown("```\n**not bold**\n```", noResolve)).toBe("<pre><code>**not bold**</code></pre>");
   });
 });
+
+describe("renderMarkdown auto-linking", () => {
+  const names = [{ name: "Old Port", slug: "old-port" }];
+
+  it("auto-links a known entity name without brackets", () => {
+    expect(renderMarkdown("The ships left Old Port at dawn.", noResolve, names)).toBe(
+      '<p>The ships left <a class="wiki-link" href="#/entity/old-port">Old Port</a> at dawn.</p>'
+    );
+  });
+
+  it("matches case-insensitively but preserves the text's own casing", () => {
+    expect(renderMarkdown("welcome to old port.", noResolve, names)).toBe(
+      '<p>welcome to <a class="wiki-link" href="#/entity/old-port">old port</a>.</p>'
+    );
+  });
+
+  it("does not double-link text already inside an explicit wikilink", () => {
+    const html = renderMarkdown("[[Old Port|Old Port]]", resolveAll, names);
+    expect(html).toBe('<p><a class="wiki-link" href="#/entity/old-port">Old Port</a></p>');
+  });
+
+  it("does not link inside inline code", () => {
+    expect(renderMarkdown("`Old Port`", noResolve, names)).toBe("<p><code>Old Port</code></p>");
+  });
+
+  it("respects word boundaries — does not match inside a longer word", () => {
+    expect(renderMarkdown("Old Porter was here.", noResolve, names)).toBe("<p>Old Porter was here.</p>");
+  });
+
+  it("prefers the longer of two overlapping names when sorted longest-first (see buildAutoLinkNames)", () => {
+    const overlapping = [
+      { name: "Old Port", slug: "old-port" },
+      { name: "Port", slug: "port" }
+    ];
+    expect(renderMarkdown("Old Port docks", noResolve, overlapping)).toBe(
+      '<p><a class="wiki-link" href="#/entity/old-port">Old Port</a> docks</p>'
+    );
+  });
+});

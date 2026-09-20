@@ -94,7 +94,8 @@ function toFrontmatter(slug: string, data: Record<string, unknown>): WikiFrontma
     statBlockSystem: typeof data.statBlockSystem === "string" ? data.statBlockSystem : undefined,
     table: toStringArray(data.table),
     number: typeof data.number === "number" ? data.number : undefined,
-    date: typeof data.date === "string" ? data.date : undefined
+    date: typeof data.date === "string" ? data.date : undefined,
+    secret: data.secret === true ? true : undefined
   };
 }
 
@@ -132,4 +133,26 @@ export function buildSlugIndex(entities: WikiEntity[]): Map<string, string> {
 export function resolveTarget(index: Map<string, string>, target: string): { slug: string } | undefined {
   const slug = index.get(normalizeKey(target));
   return slug ? { slug } : undefined;
+}
+
+export interface AutoLinkName {
+  name: string;
+  slug: string;
+}
+
+/** Below this length, a title/alias is excluded from auto-linking (see markdown.ts's renderInline)
+ *  — a short, common word that happens to be an entity's name would otherwise auto-link every
+ *  occurrence of that word across the whole wiki. Explicit [[wikilinks]] have no such limit. */
+export const MIN_AUTO_LINK_LENGTH = 4;
+
+/** Titles + aliases eligible for auto-linking, sorted longest name first so e.g. "Old Port"
+ *  matches before a shorter "Port" when both exist as entity names. */
+export function buildAutoLinkNames(entities: WikiEntity[]): AutoLinkName[] {
+  const names: AutoLinkName[] = [];
+  for (const entity of entities) {
+    for (const name of [entity.frontmatter.title, ...(entity.frontmatter.aliases ?? [])]) {
+      if (name.trim().length >= MIN_AUTO_LINK_LENGTH) names.push({ name, slug: entity.slug });
+    }
+  }
+  return names.sort((a, b) => b.name.length - a.name.length);
 }

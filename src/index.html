@@ -10,6 +10,8 @@
     />
     <link rel="icon" type="image/png" href="images/icons/favicon-32x32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="images/icons/favicon-16x16.png" sizes="16x16" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./wiki.css" />
   </head>
   <body>
@@ -32,6 +34,11 @@
           </div>
         </div>
         <select id="era-select" hidden data-tip="Filter the wiki to one era of the timeline"></select>
+        <button
+          id="view-mode-btn"
+          type="button"
+          data-tip="Toggle whether secret pages/sections are shown — flip to Player view before sharing your screen"
+        ></button>
         <button id="new-page-btn" type="button">+ New page</button>
         <div id="search-row">
           <input id="search" type="search" placeholder="Filter entities…" />

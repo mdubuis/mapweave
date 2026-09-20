@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSlugIndex, normalizeKey, parseEntityFile, resolveTarget } from "./entities";
+import { buildAutoLinkNames, buildSlugIndex, normalizeKey, parseEntityFile, resolveTarget } from "./entities";
 
 describe("parseEntityFile", () => {
   it("derives the slug from the filename", () => {
@@ -78,6 +78,14 @@ describe("parseEntityFile", () => {
     expect(entity.frontmatter.number).toBe(3);
     expect(entity.frontmatter.date).toBe("2026-01-05");
   });
+
+  it("parses secret: true, and drops any other value", () => {
+    const secret = parseEntityFile("wiki/x.md", "---\nsecret: true\n---\n");
+    expect(secret.frontmatter.secret).toBe(true);
+
+    const notSecret = parseEntityFile("wiki/y.md", "---\ntitle: Y\n---\n");
+    expect(notSecret.frontmatter.secret).toBeUndefined();
+  });
 });
 
 describe("normalizeKey", () => {
@@ -96,5 +104,22 @@ describe("buildSlugIndex / resolveTarget", () => {
     expect(resolveTarget(index, "Old Port")).toEqual({ slug: "old-port" });
     expect(resolveTarget(index, "Oldport")).toEqual({ slug: "old-port" });
     expect(resolveTarget(index, "Nowhere")).toBeUndefined();
+  });
+});
+
+describe("buildAutoLinkNames", () => {
+  it("includes titles and aliases, sorted longest name first", () => {
+    const entities = [
+      parseEntityFile("wiki/port.md", "---\ntitle: Port\n---\n"),
+      parseEntityFile("wiki/old-port.md", "---\ntitle: Old Port\naliases: [The Harbor]\n---\n")
+    ];
+    const names = buildAutoLinkNames(entities);
+    expect(names.map(n => n.name)).toEqual(["The Harbor", "Old Port", "Port"]);
+    expect(names.find(n => n.name === "Old Port")?.slug).toBe("old-port");
+  });
+
+  it("excludes names shorter than the minimum auto-link length", () => {
+    const entities = [parseEntityFile("wiki/rok.md", "---\ntitle: Rok\n---\n")];
+    expect(buildAutoLinkNames(entities)).toEqual([]);
   });
 });

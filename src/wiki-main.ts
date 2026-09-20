@@ -22,7 +22,7 @@ import {
   pickWikiDirectory,
   saveEntity
 } from "@/wiki/editor";
-import { buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
+import { type AutoLinkName, buildAutoLinkNames, buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
 import { type Era, isEntityInEra, loadEras, resolveEntityForEra } from "@/wiki/eras";
 import { parseFrontmatter } from "@/wiki/frontmatter";
 import { patchFrontmatterType } from "@/wiki/frontmatter-patch";
@@ -37,6 +37,7 @@ import {
 import { insertMapRefBlock } from "@/wiki/map-ref-patch";
 import { renderMarkdown } from "@/wiki/markdown";
 import { parseObjective, parseWeightedEntry, rollEncounter } from "@/wiki/scenario";
+import { hasSecretContent, stripSecrets } from "@/wiki/secrets";
 import {
   DEFAULT_ERA,
   type EdgeKind,
@@ -54,6 +55,7 @@ let entities: WikiEntity[] = fileEntities;
 let graph: WikiGraph = buildGraph(entities);
 let slugIndex = buildSlugIndex(entities);
 let eras: Era[] = loadEras(entities);
+let autoLinkNames: AutoLinkName[] = buildAutoLinkNames(entities);
 let handles = new Map<string, FileSystemFileHandle>();
 let rawContents = new Map<string, string>();
 let dirHandle: FileSystemDirectoryHandle | undefined;
@@ -79,10 +81,17 @@ function mergeEntitySources(): void {
   graph = buildGraph(entities);
   slugIndex = buildSlugIndex(entities);
   eras = loadEras(entities);
+  autoLinkNames = buildAutoLinkNames(entities);
 }
 
 /** Sticky UI state, not solely URL-derived: browsing via wikilinks shouldn't reset the chosen era */
 let activeEra: string | undefined = new URL(location.href).searchParams.get("era") ?? undefined;
+
+const VIEW_MODE_STORAGE_KEY = "mapweave.viewMode";
+/** GM view shows everything; player view hides `secret: true` entities and `:::secret` blocks — a
+ *  local display filter the GM flips before sharing their screen, not real access control (this
+ *  app has no auth/multi-user concept at all — see MAPWEAVE.md). */
+let viewMode: "gm" | "player" = localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "player" ? "player" : "gm";
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const byslug = (slug: string) => entities.find(e => e.slug === slug);
@@ -276,6 +285,7 @@ function renderSidebar(filter = ""): void {
 
   for (const entity of entities) {
     if (activeEra && !isEntityInEra(entity, activeEra)) continue;
+    if (viewMode === "player" && entity.frontmatter.secret) continue;
     const haystack = `${entity.frontmatter.title} ${(entity.frontmatter.tags ?? []).join(" ")}`.toLowerCase();
     if (needle && !haystack.includes(needle)) continue;
     matchCount++;
@@ -404,7 +414,9 @@ function canPlaceOnMap(entity: WikiEntity): boolean {
 function renderEntityView(slug: string): void {
   const content = el<HTMLElement>("content");
   const entity = byslug(slug);
-  if (!entity) {
+  // A direct/bookmarked link to a secret page in player view should behave as if it doesn't exist
+  // — same as it already not appearing in the sidebar/search (renderSidebar).
+  if (!entity || (viewMode === "player" && entity.frontmatter.secret)) {
     content.innerHTML = `<p>No such page: <code>${slug}</code></p>`;
     return;
   }
@@ -426,6 +438,11 @@ function renderEntityView(slug: string): void {
   const dbRef = dbRefOf(entity);
 
   const isEncounterTable = frontmatter.type === "encounter-table" && (frontmatter.table?.length ?? 0) > 0;
+  const hasSecrets = viewMode === "gm" && (frontmatter.secret || hasSecretContent(entity.body));
+  const secretBadge = hasSecrets
+    ? `<span class="secret-badge" title="Hidden from player view">${frontmatter.secret ? "secret page" : "has secrets"}</span>`
+    : "";
+  const body = viewMode === "player" ? stripSecrets(entity.body) : entity.body;
 
   const placementState: "idle" | "waiting" | "none" =
     pendingPlacement?.slug === slug ? "waiting" : canPlaceOnMap(entity) ? "idle" : "none";
@@ -454,6 +471,7 @@ function renderEntityView(slug: string): void {
         ${renderStatusBadge(frontmatter.status)}
         ${dbRef ? `<span class="map-ref-badge">from map #${dbRef.mapId}</span>` : ""}
         ${mapRefBadge}
+        ${secretBadge}
         ${tags}
       </div>
       ${frontmatter.summary ? `<p class="summary">${frontmatter.summary}</p>` : ""}
@@ -470,7 +488,7 @@ function renderEntityView(slug: string): void {
     ${renderStatsBlock(frontmatter.stats, frontmatter.statBlockSystem)}
     ${isEncounterTable ? `<section id="encounter-roller"></section>` : ""}
     ${renderRelations(frontmatter.relations)}
-    <article class="entity-body">${renderMarkdown(entity.body, resolveLink)}</article>
+    <article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>
   `;
 
   el<HTMLButtonElement>("edit-btn")?.addEventListener("click", () => renderEditorView(slug));
@@ -540,7 +558,7 @@ function renderEditorView(slug: string): void {
 
   function updatePreview(): void {
     const { content: body } = parseFrontmatter(textarea.value);
-    preview.innerHTML = renderMarkdown(body, resolveLink);
+    preview.innerHTML = renderMarkdown(body, resolveLink, autoLinkNames);
     const count = wordCount(body);
     wordCountEl.textContent = `${count} word${count === 1 ? "" : "s"}`;
   }
@@ -849,7 +867,21 @@ async function handlePlacementMessage(event: MessageEvent): Promise<void> {
   renderEntityView(slug);
 }
 
+function updateViewModeButton(): void {
+  const button = el<HTMLButtonElement>("view-mode-btn");
+  button.textContent = viewMode === "gm" ? "GM view" : "Player view";
+  button.classList.toggle("player-view-active", viewMode === "player");
+}
+
 function initToolbar(): void {
+  updateViewModeButton();
+  el<HTMLButtonElement>("view-mode-btn").addEventListener("click", () => {
+    viewMode = viewMode === "gm" ? "player" : "gm";
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    updateViewModeButton();
+    render();
+  });
+
   el<HTMLInputElement>("search").addEventListener("input", event => {
     renderSidebar((event.target as HTMLInputElement).value);
   });

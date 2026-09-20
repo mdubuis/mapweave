@@ -6,7 +6,43 @@
 
 export type LinkResolver = (target: string) => { slug: string } | undefined;
 
+/** A title/alias eligible for auto-linking, see entities.ts's buildAutoLinkNames */
+export interface AutoLinkName {
+  name: string;
+  slug: string;
+}
+
 const WIKILINK = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+// Spans already emitted as HTML by an earlier renderInline step — auto-linking must never touch
+// text inside these (an explicit [[wikilink]]'s <a>, or inline `code`)
+const PROTECTED_SPAN = /(<a\b[^>]*>.*?<\/a>|<code>.*?<\/code>)/g;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Turns any occurrence of a known entity name into a wikilink, so an author doesn't have to type
+ *  `[[Old Port]]` every time — only scans plain-text spans (see PROTECTED_SPAN), word-boundary only,
+ *  case-insensitive matching that preserves the text's own original casing in the visible label.
+ *  Names are pre-sorted longest-first (buildAutoLinkNames) so e.g. "Porter" wins over "Port" when
+ *  both would otherwise match at the same starting position. */
+function autoLink(text: string, names: AutoLinkName[]): string {
+  if (!names.length) return text;
+
+  const bySearchKey = new Map(names.map(({ name, slug }) => [name.toLowerCase(), slug]));
+  const pattern = new RegExp(`\\b(?:${names.map(({ name }) => escapeRegExp(name)).join("|")})\\b`, "gi");
+
+  return text
+    .split(PROTECTED_SPAN)
+    .map((part, index) => {
+      if (index % 2 === 1) return part; // a PROTECTED_SPAN capture — already-emitted HTML, leave as-is
+      return part.replace(pattern, matched => {
+        const slug = bySearchKey.get(matched.toLowerCase());
+        return slug ? `<a class="wiki-link" href="#/entity/${encodeURIComponent(slug)}">${matched}</a>` : matched;
+      });
+    })
+    .join("");
+}
 
 export function extractWikilinks(body: string): string[] {
   const targets: string[] = [];
@@ -23,7 +59,7 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function renderInline(raw: string, resolveLink: LinkResolver): string {
+function renderInline(raw: string, resolveLink: LinkResolver, autoLinkNames: AutoLinkName[]): string {
   let text = escapeHtml(raw);
 
   text = text.replace(/`([^`]+)`/g, (_m, code) => `<code>${code}</code>`);
@@ -36,6 +72,8 @@ function renderInline(raw: string, resolveLink: LinkResolver): string {
     return `<a class="wiki-link wiki-link-broken" href="#/new?title=${encodeURIComponent(trimmedTarget)}" title="No page yet — click to create">${label}</a>`;
   });
 
+  text = autoLink(text, autoLinkNames);
+
   text = text.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
     (_m, label, url) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`
@@ -46,7 +84,7 @@ function renderInline(raw: string, resolveLink: LinkResolver): string {
   return text;
 }
 
-export function renderMarkdown(body: string, resolveLink: LinkResolver): string {
+export function renderMarkdown(body: string, resolveLink: LinkResolver, autoLinkNames: AutoLinkName[] = []): string {
   const lines = body.split("\n");
   const html: string[] = [];
   let i = 0;
@@ -57,20 +95,22 @@ export function renderMarkdown(body: string, resolveLink: LinkResolver): string 
 
   const flushParagraph = () => {
     if (paragraph.length) {
-      html.push(`<p>${renderInline(paragraph.join(" "), resolveLink)}</p>`);
+      html.push(`<p>${renderInline(paragraph.join(" "), resolveLink, autoLinkNames)}</p>`);
       paragraph = [];
     }
   };
   const flushList = () => {
     if (list) {
       const tag = list.ordered ? "ol" : "ul";
-      html.push(`<${tag}>${list.items.map(item => `<li>${renderInline(item, resolveLink)}</li>`).join("")}</${tag}>`);
+      html.push(
+        `<${tag}>${list.items.map(item => `<li>${renderInline(item, resolveLink, autoLinkNames)}</li>`).join("")}</${tag}>`
+      );
       list = null;
     }
   };
   const flushQuote = () => {
     if (quote) {
-      html.push(`<blockquote><p>${renderInline(quote.join(" "), resolveLink)}</p></blockquote>`);
+      html.push(`<blockquote><p>${renderInline(quote.join(" "), resolveLink, autoLinkNames)}</p></blockquote>`);
       quote = null;
     }
   };
@@ -100,7 +140,7 @@ export function renderMarkdown(body: string, resolveLink: LinkResolver): string 
     if (heading) {
       flushAll();
       const level = heading[1].length;
-      html.push(`<h${level}>${renderInline(heading[2], resolveLink)}</h${level}>`);
+      html.push(`<h${level}>${renderInline(heading[2], resolveLink, autoLinkNames)}</h${level}>`);
       i++;
       continue;
     }

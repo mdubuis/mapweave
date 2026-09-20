@@ -196,9 +196,48 @@ matches against each file's slug and its `aliases`. A link that resolves nowhere
 as a distinctly styled "missing page" link — rather than breaking the page; Phase 3 extends this
 to "create the page" instead of just flagging it.
 
+## Secrets (GM view / player view)
+
+Mapweave has no accounts or access control — this is a **local display filter**, not real
+permissions. Usable on any entity, not gated to a specific `type`.
+
+- `secret: true` in frontmatter hides the whole page in player view — it disappears from the
+  sidebar/search and a direct link to it renders as "no such page." GM view always shows it, with a
+  "secret page" badge.
+- A `:::secret` ... `:::` block in the body (each marker alone on its own line) hides just that
+  part of an otherwise-visible page. GM view renders it normally, with a "has secrets" badge on the
+  page; player view strips the block entirely before rendering.
+
+```yaml
+---
+title: The Salt-Tithe Contract
+secret: true          # whole page hidden from players
+---
+```
+
+```markdown
+The merchant seems trustworthy enough.
+
+:::secret
+He's been skimming the tithe for years — the ledger in his study proves it.
+:::
+
+He offers you passage south.
+```
+
+Toggle GM/player view from the sidebar's view-mode button (persisted in this browser, per device —
+not shared with anyone else, since there's no multi-user concept to share it through).
+
 ## Markdown support
 
 The renderer covers the subset lore pages actually need: headings (`#`..`######`), paragraphs,
 bold/italic, inline code, fenced code blocks, unordered/ordered lists, blockquotes, horizontal
 rules, and links (both `[text](url)` and `[[wikilinks]]`). It is not full CommonMark — no tables,
 no nested blockquotes/lists beyond one level. Extend `src/wiki/markdown.ts` if a page needs more.
+
+**Auto-linking**: any entity's title or alias that appears as plain text in a page's body is
+automatically turned into a link, the same as typing `[[Old Port]]` by hand — no brackets needed.
+Matching is case-insensitive, whole-word only (won't match "Porter" for an entity named "Port"),
+and names under 4 characters are skipped to avoid auto-linking every occurrence of a short, common
+word that happens to share an entity's name. An explicit `[[wikilink]]` always takes priority and
+is never re-linked by this pass.
