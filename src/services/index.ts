@@ -9,7 +9,6 @@ import "./versioning";
 import "./wiki-panel";
 
 export const Services = createRegistry({
-  Cloud: () => import("@/services/io/cloud").then(m => m.CloudStorage),
   ExportJson: () => import("@/services/io/export-json").then(m => m.ExportJson),
   ExportMap: () => import("@/services/io/export").then(m => m.ExportMap),
   Load: () => import("@/services/io/load").then(m => m.Load),

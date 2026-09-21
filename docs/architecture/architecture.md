@@ -551,8 +551,8 @@ two typed registries — `Controllers` (built in `src/controllers/index.ts`) and
 - **One export per module (the convention).** Each registered module exports a single named
   object whose properties are its public methods — `export const StatesEditor = { open }`,
   `export const Save = { saveMap, prepareMapData, saveToStorage }`. The registry key matches
-  that export name. A module exposing data or a nested object wraps it in a method facade (e.g.
-  `CloudStorage` flattens `Cloud.providers.dropbox`) so it fits the dispatch contract.
+  that export name. A module exposing data or a nested object wraps it in a method facade so it
+  fits the dispatch contract, rather than exposing the object directly.
 - **Lazy by default, async at the call site.** `Controllers.X.method(...)` dynamically imports
   the module on first use (its own code-split chunk, evaluated once) and then dispatches — so
   every call returns a Promise. The factory infers each module's real signatures, so callers

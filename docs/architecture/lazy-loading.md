@@ -23,12 +23,12 @@ properties are its public methods.
   Each entry resolves to the module's `ModuleType` export: `Controllers.MarketOverview.open(id)`.
 - **`Services`** (in `src/services/index.ts`) — service- and IO-layer app-shell modules. IO lives
   under `src/services/io/`. Each module likewise exports one object (`Save`, `Load`, `ExportMap`,
-  `ExportJson`, `Installation`, `CloudStorage`, `UiTour`): `Services.Save.saveMap("machine")`.
+  `ExportJson`, `UiTour`): `Services.Save.saveMap("machine")`.
 
 The mechanism is **dispatch-only**: callers invoke methods, they don't read properties off the
-resolved object. A module that exposes data or a nested object must wrap it in a method facade (e.g.
-`CloudStorage` flattens `Cloud.providers.dropbox`), OR be loaded eagerly instead (e.g. the small
-credits string is exposed as `window.supporters` via `src/data/index.ts`).
+resolved object. A module that exposes data or a nested object must wrap it in a method facade
+instead of exposing the object directly, OR be loaded eagerly instead (e.g. the small credits
+string is exposed as `window.supporters` via `src/data/index.ts`).
 
 Both `index.ts` files are eager `<script type="module">` entries in `index.html`, so the registries
 exist at startup. They hold only loader thunks, so the eager cost is a few bytes, not module bodies.

@@ -16,7 +16,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
   const { code, ctrlKey, altKey, shiftKey } = event;
   if (altKey && !ctrlKey && !shiftKey) event.preventDefault(); // disallow plain alt key combinations
-  if (ctrlKey && ["KeyS", "KeyC"].includes(code)) event.preventDefault(); // disallow CTRL + S and CTRL + C
+  if (ctrlKey && code === "KeyS") event.preventDefault(); // disallow CTRL + S
   if (["F1", "F2", "F6", "F9", "Tab"].includes(code)) event.preventDefault(); // disallow default Fn and Tab
 }
 
@@ -44,7 +44,6 @@ function handleKeyup(event: KeyboardEvent): void {
   else if (code === "KeyO" && findEl("canvas3d")) Controllers.View3d.toggleOptions();
   else if (ctrl && code === "KeyQ") toggleSaveReminder();
   else if (ctrl && code === "KeyS") Services.Save.saveMap("machine");
-  else if (ctrl && code === "KeyC") Services.Save.saveMap("dropbox");
   else if (ctrl && code === "KeyZ") findEl("undo")?.click();
   else if (ctrl && code === "KeyY") findEl("redo")?.click();
   else if ((shift || altShift) && code === "KeyH") Controllers.HeightmapEditor.open();

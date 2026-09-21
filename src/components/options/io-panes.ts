@@ -4,8 +4,7 @@ import { closeDialogs } from "@/components/dialog/dialog-helpers";
 import { Layers } from "@/components/layers";
 import { tip } from "@/components/tooltips";
 import { Services } from "@/services";
-import { ensureEl, findEl } from "@/utils/nodeUtils";
-import { rn } from "@/utils/numberUtils";
+import { ensureEl } from "@/utils/nodeUtils";
 
 const closeButton = {
   Close: function (this: HTMLElement) {
@@ -35,7 +34,7 @@ function showExportPane(): void {
   });
 }
 
-async function showLoadPane(): Promise<void> {
+function showLoadPane(): void {
   $("#loadMapData").dialog({
     title: "Load map",
     resizable: false,
@@ -43,51 +42,6 @@ async function showLoadPane(): Promise<void> {
     position: { my: "center", at: "center", of: "svg" },
     buttons: closeButton
   });
-
-  // Electron has no Dropbox integration, the whole block is removed from the DOM there
-  if (!findEl("loadFromDropbox")) return;
-
-  // the sharable link belongs to this dialog, drop the one made for a previously selected file
-  ensureEl("sharableLinkContainer").style.display = "none";
-
-  const connectButton = ensureEl("dropboxConnectButton");
-  const buttons = ensureEl("loadFromDropboxButtons");
-  const fileSelect = ensureEl<HTMLSelectElement>("loadFromDropboxSelect");
-
-  if (!(await Services.Cloud.isConnected())) {
-    connectButton.style.display = "inline-block";
-    buttons.style.display = "none";
-    fileSelect.style.display = "none";
-    return;
-  }
-
-  connectButton.style.display = "none";
-  fileSelect.style.display = "block";
-  fileSelect.innerHTML = /* html */ `<option value="" disabled selected>Loading...</option>`;
-
-  const files = await Services.Cloud.list();
-  if (!files) {
-    buttons.style.display = "none";
-    fileSelect.innerHTML = /* html */ `<option value="" disabled selected>Save files to Dropbox first</option>`;
-    return;
-  }
-
-  buttons.style.display = "block";
-  fileSelect.innerHTML = "";
-  for (const { name, updated, size, path } of files) {
-    const label = `${new Date(updated).toLocaleDateString()}: ${name} [${rn(size / 1024 / 1024, 2)} MB]`;
-    fileSelect.options.add(new Option(label, path));
-  }
-}
-
-async function connectToDropbox(): Promise<void> {
-  await Services.Cloud.connect();
-  if (await Services.Cloud.isConnected()) void showLoadPane();
-}
-
-function copyLinkToClipboard(): void {
-  const link = ensureEl("sharableLink").getAttribute("href") ?? "";
-  navigator.clipboard.writeText(link).then(() => tip("Link is copied to the clipboard", true, "success", 8000));
 }
 
 const URL_PATTERN = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-/]))?/;
@@ -95,8 +49,7 @@ const URL_PATTERN = /(ftp|http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/(
 function loadURL(): void {
   ensureEl("alertMessage").innerHTML = /* html */ `Provide URL to map file:
     <input id="mapURL" type="url" style="width: 24em" placeholder="https://e-cloud.com/test.map" />
-    <br /><i>Please note server should allow CORS for file to be loaded. If CORS is not allowed, save file to
-    Dropbox and provide a direct link</i>`;
+    <br /><i>Please note the server must allow CORS for the file to be loaded</i>`;
 
   $("#alert").dialog({
     resizable: false,
@@ -232,15 +185,11 @@ export { showExportPane, showLoadPane, showSavePane };
 // Legacy seam: the save/load/export dialogs still live in map.html and wire these inline
 declare global {
   interface Window {
-    connectToDropbox: typeof connectToDropbox;
-    copyLinkToClipboard: typeof copyLinkToClipboard;
     loadURL: typeof loadURL;
     openExportToPngTiles: typeof openExportToPngTiles;
     exportToJson: typeof import("@/services/io/export-json").ExportJson.exportToJson;
   }
 }
-window.connectToDropbox = connectToDropbox;
-window.copyLinkToClipboard = copyLinkToClipboard;
 window.loadURL = loadURL;
 window.openExportToPngTiles = openExportToPngTiles;
 window.exportToJson = type => Services.ExportJson.exportToJson(type);

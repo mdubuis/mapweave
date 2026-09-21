@@ -5,13 +5,12 @@ import { Layers } from "@/components/layers";
 import { tip } from "@/components/tooltips";
 import { GraphOverride } from "@/generators/graph-override";
 import { Notes } from "@/generators/notes";
-import { Services } from "@/services";
 import { getUsedFonts } from "@/services/fonts";
 import { savedMessage } from "@/services/platform";
 import { VERSION } from "@/services/versioning";
 import { ensureEl, getFileName, link, parseError, rn } from "@/utils";
 
-type SaveMethod = "storage" | "machine" | "dropbox";
+type SaveMethod = "storage" | "machine";
 
 async function saveMap(method: SaveMethod): Promise<void> {
   if (customization) return tip("Map cannot be saved in EDIT mode, please complete the edit and retry", false, "error");
@@ -23,7 +22,6 @@ async function saveMap(method: SaveMethod): Promise<void> {
 
     if (method === "storage") await saveToStorage(mapData, true);
     if (method === "machine") saveToMachine(mapData, filename);
-    if (method === "dropbox") await saveToDropbox(mapData, filename);
   } catch (error) {
     ERROR && console.error(error);
     alertMessage.innerHTML = /* html */ `An error occurred while saving the map. If the issue persists, please copy the message below and report it on ${link(
@@ -212,11 +210,6 @@ function saveToMachine(mapData: string, filename: string): void {
 
   tip(savedMessage("Map"), true, "success", 8000);
   setTimeout(() => window.URL.revokeObjectURL(URL), 5000);
-}
-
-async function saveToDropbox(mapData: string, filename: string): Promise<void> {
-  await Services.Cloud.save(filename, mapData);
-  tip("Map is saved to your Dropbox", true, "success", 8000);
 }
 
 export const Save = { saveMap, prepareMapData, saveToStorage };

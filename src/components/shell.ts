@@ -18,7 +18,7 @@ export function initShell(): void {
   initTourPromptButton();
 
   if (!isLocalhost() && !isElectron()) window.onbeforeunload = () => "Are you sure you want to navigate away?";
-  if (isElectron()) removeWebOnlyControls();
+  if (isElectron()) findEl("getAppButton")?.remove();
 }
 
 /** Keep the next unpinned map request in step with the browser window. */
@@ -142,10 +142,4 @@ export function warnIfServerless(): boolean {
     message: /* html */ `Mapweave cannot run serverless. Run a local web server (e.g. <code>npm run dev</code>) and open it from there instead of opening the file directly.`
   });
   return true;
-}
-
-function removeWebOnlyControls(): void {
-  findEl("getAppButton")?.remove();
-  findEl("saveToDropboxButton")?.remove();
-  findEl("loadFromDropbox")?.remove();
 }
