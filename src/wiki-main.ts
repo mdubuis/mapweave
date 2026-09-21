@@ -7,6 +7,8 @@ import {
   type SimulationNodeDatum,
   select
 } from "d3";
+import { type BoardHandle, mountBoard } from "@/renderers/leaflet/board-canvas";
+import { type BoardData, extractBoardData, replaceBoardBlockInRaw } from "@/wiki/board";
 import {
   type ConnectedMapInfo,
   dbRefOf,
@@ -87,6 +89,16 @@ const WORLD_STORAGE_KEY = "mapweave.lastMapId";
  *  Only one at a time; the UI doesn't offer a second "Place on map" click while this is set. */
 let pendingPlacement: { requestId: string; slug: string; era: string; kind: PlacementKind } | undefined;
 
+/** The one `type: board` canvas currently mounted, if any — owns a live Leaflet map instance that
+ *  must be explicitly torn down (destroy()) before #content is overwritten, or it leaks document-
+ *  level event listeners. See teardownBoard(). */
+let activeBoardHandle: BoardHandle | undefined;
+
+function teardownBoard(): void {
+  activeBoardHandle?.destroy();
+  activeBoardHandle = undefined;
+}
+
 const API_BASE = "http://127.0.0.1:3001";
 
 function mergeEntitySources(): void {
@@ -123,7 +135,17 @@ const resolveLink = (target: string) => resolveTarget(slugIndex, target);
 
 const MAP_REF_KINDS: MapRefKind[] = ["burg", "state", "province", "religion", "culture", "marker", "river"];
 
-const ENTITY_TYPES = ["place", "character", "faction", "event", "item", "quest", "encounter-table", "session-log"];
+const ENTITY_TYPES = [
+  "place",
+  "character",
+  "faction",
+  "event",
+  "item",
+  "quest",
+  "encounter-table",
+  "session-log",
+  "board"
+];
 
 /** Current type first if it's not one of the standard ones (e.g. "era"), so the select never
  *  silently swaps a page to a different type just by opening the editor. */
@@ -458,6 +480,7 @@ function canPlaceOnMap(entity: WikiEntity): boolean {
 }
 
 function renderEntityView(slug: string): void {
+  teardownBoard();
   const content = el<HTMLElement>("content");
   const entity = byslug(slug);
   // A direct/bookmarked link to a secret page in player view should behave as if it doesn't exist
@@ -484,6 +507,7 @@ function renderEntityView(slug: string): void {
   const dbRef = dbRefOf(entity);
 
   const isEncounterTable = frontmatter.type === "encounter-table" && (frontmatter.table?.length ?? 0) > 0;
+  const isBoard = frontmatter.type === "board";
   const hasSecrets = viewMode === "gm" && (frontmatter.secret || hasSecretContent(entity.body));
   const secretBadge = hasSecrets
     ? `<span class="secret-badge" title="Hidden from player view">${frontmatter.secret ? "secret page" : "has secrets"}</span>`
@@ -534,11 +558,31 @@ function renderEntityView(slug: string): void {
     ${renderStatsBlock(frontmatter.stats, frontmatter.statBlockSystem)}
     ${isEncounterTable ? `<section id="encounter-roller"></section>` : ""}
     ${renderRelations(frontmatter.relations)}
-    <article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>
+    ${
+      isBoard
+        ? `<div id="board-toolbar" class="board-toolbar">
+            ${
+              canEdit
+                ? `<button id="board-add-image-btn" type="button">Add image</button>
+                  <button id="board-add-text-btn" type="button">Add text</button>
+                  <label>Link page:
+                    <select id="board-page-picker">${boardPagePickerOptions(slug)}</select>
+                  </label>
+                  <button id="board-add-page-btn" type="button">Link page</button>
+                  <button id="board-connect-btn" type="button">Connect</button>
+                  <button id="board-delete-btn" type="button">Delete</button>
+                  <button id="board-save-btn" type="button">Save</button>`
+                : `<p class="muted">Read-only board</p>`
+            }
+          </div>
+          <div id="board-canvas-container" class="board-canvas-container"></div>`
+        : `<article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>`
+    }
   `;
 
   el<HTMLButtonElement>("edit-btn")?.addEventListener("click", () => renderEditorView(slug));
   if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
+  if (isBoard) mountBoardView(slug, entity, Boolean(canEdit));
 
   el<HTMLButtonElement>("place-on-map-btn")?.addEventListener("click", () => {
     const kind = el<HTMLSelectElement>("place-kind").value as PlacementKind;
@@ -546,6 +590,89 @@ function renderEntityView(slug: string): void {
   });
   el<HTMLButtonElement>("place-cancel-btn")?.addEventListener("click", () => {
     cancelPendingPlacement();
+    renderEntityView(slug);
+  });
+}
+
+function boardPagePickerOptions(excludeSlug: string): string {
+  return entities
+    .filter(entity => entity.slug !== excludeSlug)
+    .slice()
+    .sort((a, b) => a.frontmatter.title.localeCompare(b.frontmatter.title))
+    .map(entity => `<option value="${encodeURIComponent(entity.slug)}">${entity.frontmatter.title}</option>`)
+    .join("");
+}
+
+const MAX_BOARD_IMAGE_SIZE = 2 * 1024 * 1024;
+
+function fileToDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error instanceof Error ? reader.error : new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Mounts the `type: board` canvas into #board-canvas-container (already in the DOM from
+ *  renderEntityView's innerHTML) and wires its toolbar. Board contents are kept in a local `data`
+ *  variable updated via mountBoard's onChange callback, and only written to disk on "Save" — no
+ *  autosave on drag, matching the rest of this app's explicit-save convention. */
+function mountBoardView(slug: string, entity: WikiEntity, canEdit: boolean): void {
+  const container = el<HTMLElement>("board-canvas-container");
+  let data: BoardData = extractBoardData(entity.body);
+
+  const handle = mountBoard(container, data, {
+    editable: canEdit,
+    resolvePage(pageSlug) {
+      const target = byslug(pageSlug);
+      return target
+        ? { title: target.frontmatter.title, href: `#/entity/${encodeURIComponent(target.slug)}` }
+        : undefined;
+    },
+    onChange(next) {
+      data = next;
+    }
+  });
+  activeBoardHandle = handle;
+
+  if (!canEdit) return;
+
+  el<HTMLButtonElement>("board-add-image-btn").addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > MAX_BOARD_IMAGE_SIZE) {
+        window.alert(`Image is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is 2 MB.`);
+        return;
+      }
+      void fileToDataUri(file).then(dataUri => handle.addImage(dataUri));
+    });
+    input.click();
+  });
+
+  el<HTMLButtonElement>("board-add-text-btn").addEventListener("click", () => {
+    const text = window.prompt("Card text:");
+    if (text?.trim()) handle.addText(text.trim());
+  });
+
+  el<HTMLButtonElement>("board-add-page-btn").addEventListener("click", () => {
+    const picked = el<HTMLSelectElement>("board-page-picker").value;
+    if (picked) handle.addPage(decodeURIComponent(picked));
+  });
+
+  el<HTMLButtonElement>("board-connect-btn").addEventListener("click", () => handle.startConnectMode());
+  el<HTMLButtonElement>("board-delete-btn").addEventListener("click", () => handle.deleteSelected());
+
+  el<HTMLButtonElement>("board-save-btn").addEventListener("click", async () => {
+    const fileHandle = handles.get(slug);
+    const raw = rawContents.get(slug);
+    if (!fileHandle || raw === undefined) return;
+    await saveEntity(fileHandle, replaceBoardBlockInRaw(raw, data));
+    await reloadFromDirectory();
     renderEntityView(slug);
   });
 }
@@ -570,6 +697,7 @@ function debounceTrailing<T extends (...args: never[]) => void>(fn: T, ms: numbe
 }
 
 function renderEditorView(slug: string): void {
+  teardownBoard();
   const entity = byslug(slug);
   const handle = handles.get(slug);
   if (!entity || !handle) {
@@ -862,6 +990,7 @@ function renderTimelineView(): void {
 }
 
 function render(): void {
+  teardownBoard();
   const route = currentRoute();
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);

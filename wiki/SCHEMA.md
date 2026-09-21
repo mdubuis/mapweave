@@ -277,6 +277,43 @@ as any entity) — real files, so they travel with the folder like everything el
 version control. That folder is excluded from the entity list itself, so a template never shows up
 as a page in the sidebar, search, or graph.
 
+## Board — `type: board`
+
+A blank, pannable/zoomable canvas for arranging images, freeform text notes, and cards linking to
+other pages — a mood board or relationship map, not a reading page. Opening a board page swaps the
+usual Markdown body for a canvas; `summary`/`tags`/`relations`/etc. still work normally above it.
+
+```yaml
+---
+title: The Hollow Court — mood board
+type: board
+---
+```
+
+Board contents live in the body, in one fenced ` ```board ` block holding JSON — not in
+frontmatter, since the YAML-lite parser (see below) can't represent an array of objects. This block
+is written by the board editor itself; hand-editing it is possible but not the intended workflow.
+
+```json
+{
+  "items": [
+    { "id": "a1b2c3d4", "kind": "text", "x": 40, "y": 20, "width": 200, "height": 100, "content": "The Hollow Emperor's court, as described by the refugees" },
+    { "id": "e5f6g7h8", "kind": "image", "x": 300, "y": 20, "width": 220, "height": 160, "content": "data:image/png;base64,..." },
+    { "id": "i9j0k1l2", "kind": "page", "x": 40, "y": 200, "width": 200, "height": 70, "content": "the-hollow-emperor" }
+  ],
+  "connectors": [{ "id": "c1", "from": "a1b2c3d4", "to": "i9j0k1l2" }]
+}
+```
+
+Three card kinds: `image` (a data-URI, same 2 MB cap as note images — see notes-rich-text.ts),
+`text` (plain text, double-click to edit), and `page` (`content` is another entity's slug — the
+card shows its title and links to it, same as a wikilink). Connectors are plain straight lines
+between two cards' ids, no arrowheads or curves. Cards are dragged and resized directly on the
+canvas; nothing here is meant to be edited by hand.
+
+Like the rest of this app, there is **no autosave** — board changes stay in memory until you click
+Save, which writes the whole page back to disk in one go, same as the regular page editor.
+
 ## Markdown support
 
 The renderer covers the subset lore pages actually need: headings (`#`..`######`), paragraphs,
