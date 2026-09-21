@@ -4,6 +4,7 @@
  * only adds the ability to read/write those same files live from a user-picked local folder.
  */
 import { parseEntityFile } from "./entities";
+import { patchFrontmatterField } from "./frontmatter-patch";
 import { buildMapRefBlockLines } from "./map-ref-patch";
 import { DEFAULT_ERA, type MapRef, type WikiEntity } from "./types";
 
@@ -80,16 +81,29 @@ function scenarioTemplateBlock(type: string): string {
   return "";
 }
 
+/**
+ * `templateRaw`, when given, is a saved template's complete file text (see wiki-main.ts's
+ * PageTemplate/renderNewEntityView) — captured verbatim when saved, so applying it is just
+ * overwriting its `title:` line, not rebuilding frontmatter from scratch. Without one, builds the
+ * usual bare stub (mapRef + the per-type scenario starter, unchanged).
+ */
 export async function createEntity(
   dir: FileSystemDirectoryHandle,
   title: string,
   type: string,
   mapRef?: MapRef,
-  era?: string
+  era?: string,
+  templateRaw?: string
 ): Promise<{ slug: string }> {
   const slug = slugify(title);
   const folder = await dir.getDirectoryHandle(`${type}s`, { create: true });
   const handle = await folder.getFileHandle(`${slug}.md`, { create: true });
+
+  if (templateRaw) {
+    await saveEntity(handle, patchFrontmatterField(templateRaw, "title", title));
+    return { slug };
+  }
+
   const mapRefBlock = mapRef ? `${buildMapRefBlockLines(era ?? DEFAULT_ERA, mapRef).join("\n")}\n` : "";
   await saveEntity(handle, `---\ntitle: ${title}\ntype: ${type}\n${mapRefBlock}${scenarioTemplateBlock(type)}---\n\n`);
   return { slug };

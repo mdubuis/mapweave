@@ -95,7 +95,8 @@ function toFrontmatter(slug: string, data: Record<string, unknown>): WikiFrontma
     table: toStringArray(data.table),
     number: typeof data.number === "number" ? data.number : undefined,
     date: typeof data.date === "string" ? data.date : undefined,
-    secret: data.secret === true ? true : undefined
+    secret: data.secret === true ? true : undefined,
+    parent: typeof data.parent === "string" && data.parent.trim() ? data.parent.trim() : undefined
   };
 }
 
@@ -138,6 +139,64 @@ export function resolveTarget(index: Map<string, string>, target: string): { slu
 export interface AutoLinkName {
   name: string;
   slug: string;
+}
+
+/** A short excerpt around the first case-insensitive match, original casing preserved so it reads
+ *  naturally — used for a full-text search result whose title/tags didn't match (see wiki-main.ts's
+ *  renderSidebar). Returns "" when there's no match. */
+export function extractSnippet(haystack: string, needle: string, radius = 40): string {
+  const index = haystack.toLowerCase().indexOf(needle.toLowerCase());
+  if (index === -1) return "";
+  const start = Math.max(0, index - radius);
+  const end = Math.min(haystack.length, index + needle.length + radius);
+  return `${start > 0 ? "…" : ""}${haystack.slice(start, end).trim()}${end < haystack.length ? "…" : ""}`;
+}
+
+export interface EntityTree {
+  roots: WikiEntity[];
+  childrenBySlug: Map<string, WikiEntity[]>;
+}
+
+/** Builds a parent/child tree from a flat list of same-type entities (see wiki/SCHEMA.md's `parent`
+ *  field) — pass one type-group's entities at a time, since `parent` only nests within the same
+ *  type; a `parent` pointing outside the given list just makes that entity a root. Breaks any
+ *  accidental cycle (A parent of B, B parent of A, ...) by making every entity on the cycle a root
+ *  instead of silently dropping them from the tree. */
+export function buildEntityTree(entities: WikiEntity[]): EntityTree {
+  const bySlug = new Map(entities.map(entity => [entity.slug, entity]));
+  const parentSlugOf = new Map<string, string>();
+  for (const entity of entities) {
+    const parentSlug = entity.frontmatter.parent;
+    if (parentSlug && parentSlug !== entity.slug && bySlug.has(parentSlug)) parentSlugOf.set(entity.slug, parentSlug);
+  }
+
+  const inCycle = new Set<string>();
+  for (const slug of parentSlugOf.keys()) {
+    const seen = new Set<string>();
+    let current: string | undefined = slug;
+    while (current) {
+      if (seen.has(current)) {
+        inCycle.add(slug);
+        break;
+      }
+      seen.add(current);
+      current = parentSlugOf.get(current);
+    }
+  }
+
+  const roots: WikiEntity[] = [];
+  const childrenBySlug = new Map<string, WikiEntity[]>();
+  for (const entity of entities) {
+    const parentSlug = inCycle.has(entity.slug) ? undefined : parentSlugOf.get(entity.slug);
+    if (parentSlug) {
+      const children = childrenBySlug.get(parentSlug) ?? [];
+      children.push(entity);
+      childrenBySlug.set(parentSlug, children);
+    } else {
+      roots.push(entity);
+    }
+  }
+  return { roots, childrenBySlug };
 }
 
 /** Below this length, a title/alias is excluded from auto-linking (see markdown.ts's renderInline)

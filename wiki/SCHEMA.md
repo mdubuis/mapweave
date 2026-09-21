@@ -40,6 +40,19 @@ graph (`this-file --relation-name--> target-slug`), in addition to whatever `[[w
 in the body. Use it for relationships worth showing on the graph even when the body prose doesn't
 happen to link them (e.g. `located_in`, `member_of`, `parent_of`).
 
+### `parent`
+
+```yaml
+parent: old-port   # slug of another entity of the *same type*
+```
+
+Nests this entity under another one in the sidebar (an indented sub-item, like a district page
+nested under its city). Only nests when the parent is the same `type` — a `parent` pointing at a
+different type, or at a slug that doesn't exist, just falls back to a flat top-level entry rather
+than erroring. This is distinct from `relations: { parent_of: ... }` above: that's a generic,
+cross-type graph edge shown in the "Relations" list; `parent` specifically controls sidebar
+grouping/indentation and only makes sense within one type.
+
 ### `map_ref`
 
 Links this wiki entity to one object on the generated map, and powers the bidirectional
@@ -227,6 +240,18 @@ He offers you passage south.
 
 Toggle GM/player view from the sidebar's view-mode button (persisted in this browser, per device —
 not shared with anyone else, since there's no multi-user concept to share it through).
+
+## Page templates
+
+A starter you can pick when creating a page, beyond the built-in per-type ones. From the editor,
+"Save as template…" captures the whole page (frontmatter + body) as-is under a name you choose;
+from "Create page," pick that template from the "Template:" dropdown (filtered to the type you've
+selected) instead of starting blank — only the title changes, everything else in the template
+carries over verbatim.
+
+Templates are stored in this browser's `localStorage`, **not** in the `wiki/` folder — unlike the
+wiki's own content, they aren't files, so they don't travel with the folder if you move it, share
+it, or check it into version control. A deliberate scope limit, not an oversight.
 
 ## Markdown support
 

@@ -57,6 +57,10 @@ export interface WikiFrontmatter {
    *  for the GM to flip before sharing their screen, not real access control. A `:::secret` block
    *  in the body (see wiki/secrets.ts) hides part of an otherwise-visible page instead of all of it. */
   secret?: boolean;
+  /** Slug of a parent entity, for the sidebar's nested tree (wiki-main.ts's buildGroupTree) — only
+   *  nests when the parent is the same `type`; anything else (different type, unknown slug) falls
+   *  back to a flat top-level entry rather than erroring. See wiki/SCHEMA.md. */
+  parent?: string;
   [key: string]: unknown;
 }
 

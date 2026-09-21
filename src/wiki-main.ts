@@ -22,7 +22,15 @@ import {
   pickWikiDirectory,
   saveEntity
 } from "@/wiki/editor";
-import { type AutoLinkName, buildAutoLinkNames, buildSlugIndex, loadEntities, resolveTarget } from "@/wiki/entities";
+import {
+  type AutoLinkName,
+  buildAutoLinkNames,
+  buildEntityTree,
+  buildSlugIndex,
+  extractSnippet,
+  loadEntities,
+  resolveTarget
+} from "@/wiki/entities";
 import { type Era, isEntityInEra, loadEras, resolveEntityForEra } from "@/wiki/eras";
 import { parseFrontmatter } from "@/wiki/frontmatter";
 import { patchFrontmatterType } from "@/wiki/frontmatter-patch";
@@ -92,6 +100,44 @@ const VIEW_MODE_STORAGE_KEY = "mapweave.viewMode";
  *  local display filter the GM flips before sharing their screen, not real access control (this
  *  app has no auth/multi-user concept at all — see MAPWEAVE.md). */
 let viewMode: "gm" | "player" = localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "player" ? "player" : "gm";
+
+/**
+ * User-saved page templates — a starter you pick when creating a page, beyond the built-in per-type
+ * ones (scenarioTemplateBlock in editor.ts). Stored in localStorage, not the wiki folder: unlike
+ * the wiki's own content, templates aren't part of what gets committed/shared — a deliberate scope
+ * limit, see the approved plan. `raw` is a complete file's text, captured verbatim when saved
+ * ("Save as template" in renderEditorView); applying it just overwrites its `title:` line
+ * (createEntity's templateRaw param), never a reparse+reserialize.
+ */
+interface PageTemplate {
+  type: string;
+  raw: string;
+}
+
+const TEMPLATE_STORAGE_PREFIX = "mapweave.template.";
+
+function listTemplateNames(): string[] {
+  const names: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(TEMPLATE_STORAGE_PREFIX)) names.push(key.slice(TEMPLATE_STORAGE_PREFIX.length));
+  }
+  return names.sort();
+}
+
+function loadTemplate(name: string): PageTemplate | undefined {
+  const raw = localStorage.getItem(TEMPLATE_STORAGE_PREFIX + name);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as PageTemplate;
+  } catch {
+    return undefined;
+  }
+}
+
+function templateNamesForType(type: string): string[] {
+  return listTemplateNames().filter(name => loadTemplate(name)?.type === type);
+}
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const byslug = (slug: string) => entities.find(e => e.slug === slug);
@@ -277,17 +323,44 @@ function renderEraSelect(): void {
     .join("")}`;
 }
 
+function renderEntityList(
+  items: WikiEntity[],
+  childrenBySlug: Map<string, WikiEntity[]>,
+  snippetBySlug: Map<string, string>
+): HTMLUListElement {
+  const ul = document.createElement("ul");
+  for (const entity of items) {
+    const brokenCount = graph.brokenLinks.get(entity.slug)?.length ?? 0;
+    const snippet = snippetBySlug.get(entity.slug);
+    const li = document.createElement("li");
+    li.innerHTML = `<a href="#/entity/${encodeURIComponent(entity.slug)}">${entity.frontmatter.title}</a>${
+      brokenCount ? ` <span class="badge-broken" title="${brokenCount} unresolved link(s)">${brokenCount}</span>` : ""
+    }${snippet ? `<div class="search-snippet">${snippet}</div>` : ""}`;
+    const children = childrenBySlug.get(entity.slug);
+    if (children?.length) li.appendChild(renderEntityList(children, childrenBySlug, snippetBySlug));
+    ul.appendChild(li);
+  }
+  return ul;
+}
+
 function renderSidebar(filter = ""): void {
   const list = el<HTMLElement>("entity-list");
   const grouped = new Map<string, WikiEntity[]>();
+  const snippetBySlug = new Map<string, string>();
   const needle = filter.toLowerCase();
   let matchCount = 0;
 
   for (const entity of entities) {
     if (activeEra && !isEntityInEra(entity, activeEra)) continue;
     if (viewMode === "player" && entity.frontmatter.secret) continue;
-    const haystack = `${entity.frontmatter.title} ${(entity.frontmatter.tags ?? []).join(" ")}`.toLowerCase();
-    if (needle && !haystack.includes(needle)) continue;
+
+    const titleAndTags = `${entity.frontmatter.title} ${(entity.frontmatter.tags ?? []).join(" ")}`;
+    if (needle && !titleAndTags.toLowerCase().includes(needle)) {
+      const body = viewMode === "player" ? stripSecrets(entity.body) : entity.body;
+      if (!body.toLowerCase().includes(needle)) continue;
+      snippetBySlug.set(entity.slug, extractSnippet(body, needle));
+    }
+
     matchCount++;
     const group = grouped.get(entity.frontmatter.type) ?? [];
     group.push(entity);
@@ -304,16 +377,8 @@ function renderSidebar(filter = ""): void {
     heading.textContent = type;
     section.appendChild(heading);
 
-    const ul = document.createElement("ul");
-    for (const item of items) {
-      const brokenCount = graph.brokenLinks.get(item.slug)?.length ?? 0;
-      const li = document.createElement("li");
-      li.innerHTML = `<a href="#/entity/${encodeURIComponent(item.slug)}">${item.frontmatter.title}</a>${
-        brokenCount ? ` <span class="badge-broken" title="${brokenCount} unresolved link(s)">${brokenCount}</span>` : ""
-      }`;
-      ul.appendChild(li);
-    }
-    section.appendChild(ul);
+    const { roots, childrenBySlug } = buildEntityTree(items);
+    section.appendChild(renderEntityList(roots, childrenBySlug, snippetBySlug));
     list.appendChild(section);
   }
 }
@@ -549,6 +614,7 @@ function renderEditorView(slug: string): void {
     <div class="editor-actions">
       <button id="save-btn" type="button">Save</button>
       <button id="cancel-btn" type="button">Cancel</button>
+      <button id="save-template-btn" type="button">Save as template…</button>
     </div>
   `;
 
@@ -576,6 +642,12 @@ function renderEditorView(slug: string): void {
     await reloadFromDirectory();
     renderEntityView(slug);
   });
+  el<HTMLButtonElement>("save-template-btn").addEventListener("click", () => {
+    const name = window.prompt("Template name:");
+    if (!name?.trim()) return;
+    const type = el<HTMLSelectElement>("editor-type").value;
+    localStorage.setItem(TEMPLATE_STORAGE_PREFIX + name.trim(), JSON.stringify({ type, raw: textarea.value }));
+  });
 }
 
 function renderNewEntityView(title: string, mapRef?: MapRef): void {
@@ -598,12 +670,37 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
     <label>Type:
       <select id="new-type">${typeOptionsHtml("place")}</select>
     </label>
+    <label>Template:
+      <select id="new-template"></select>
+    </label>
+    <button id="delete-template-btn" type="button" hidden>Delete template</button>
     <button id="create-btn" type="button">Create page</button>
   `;
 
+  function refreshTemplateOptions(): void {
+    const type = el<HTMLSelectElement>("new-type").value;
+    const names = templateNamesForType(type);
+    el<HTMLSelectElement>("new-template").innerHTML =
+      `<option value="">(blank)</option>${names.map(name => `<option value="${name}">${name}</option>`).join("")}`;
+    el<HTMLButtonElement>("delete-template-btn").hidden = true;
+  }
+  refreshTemplateOptions();
+
+  el<HTMLSelectElement>("new-type").addEventListener("change", refreshTemplateOptions);
+  el<HTMLSelectElement>("new-template").addEventListener("change", event => {
+    el<HTMLButtonElement>("delete-template-btn").hidden = !(event.target as HTMLSelectElement).value;
+  });
+  el<HTMLButtonElement>("delete-template-btn").addEventListener("click", () => {
+    const name = el<HTMLSelectElement>("new-template").value;
+    if (name) localStorage.removeItem(TEMPLATE_STORAGE_PREFIX + name);
+    refreshTemplateOptions();
+  });
+
   el<HTMLButtonElement>("create-btn").addEventListener("click", async () => {
     const type = el<HTMLSelectElement>("new-type").value;
-    const { slug } = await createEntity(dirHandle!, title, type, mapRef, activeEra ?? DEFAULT_ERA);
+    const templateName = el<HTMLSelectElement>("new-template").value;
+    const templateRaw = templateName ? loadTemplate(templateName)?.raw : undefined;
+    const { slug } = await createEntity(dirHandle!, title, type, mapRef, activeEra ?? DEFAULT_ERA, templateRaw);
     await reloadFromDirectory();
     location.hash = `#/entity/${encodeURIComponent(slug)}`;
   });
@@ -882,9 +979,12 @@ function initToolbar(): void {
     render();
   });
 
-  el<HTMLInputElement>("search").addEventListener("input", event => {
-    renderSidebar((event.target as HTMLInputElement).value);
-  });
+  el<HTMLInputElement>("search").addEventListener(
+    "input",
+    debounceTrailing(event => {
+      renderSidebar((event.target as HTMLInputElement).value);
+    }, 150)
+  );
 
   el<HTMLButtonElement>("new-page-btn").addEventListener("click", () => {
     const title = window.prompt("Title for the new page:");

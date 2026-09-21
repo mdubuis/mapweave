@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { patchFrontmatterType } from "./frontmatter-patch";
+import { patchFrontmatterField, patchFrontmatterType } from "./frontmatter-patch";
 
 describe("patchFrontmatterType", () => {
   it("replaces an existing type line without touching the rest", () => {
@@ -24,5 +24,24 @@ describe("patchFrontmatterType", () => {
   it("returns the input unchanged when there is no frontmatter block", () => {
     const raw = "Just a body, no frontmatter.\n";
     expect(patchFrontmatterType(raw, "place")).toBe(raw);
+  });
+});
+
+describe("patchFrontmatterField", () => {
+  it("replaces an arbitrary key, not just type", () => {
+    const raw = "---\ntitle: Old Draft\ntype: place\n---\n\nBody.\n";
+    expect(patchFrontmatterField(raw, "title", "Old Port")).toBe("---\ntitle: Old Port\ntype: place\n---\n\nBody.\n");
+  });
+
+  it("inserts the key right after the opening --- when it's missing", () => {
+    const raw = "---\ntype: place\n---\n\nBody.\n";
+    expect(patchFrontmatterField(raw, "title", "Old Port")).toBe("---\ntitle: Old Port\ntype: place\n---\n\nBody.\n");
+  });
+
+  it("doesn't confuse a prefix match (e.g. 'parent' vs 'parenthood')", () => {
+    const raw = "---\nparenthood: true\n---\n\nBody.\n";
+    expect(patchFrontmatterField(raw, "parent", "old-port")).toBe(
+      "---\nparent: old-port\nparenthood: true\n---\n\nBody.\n"
+    );
   });
 });

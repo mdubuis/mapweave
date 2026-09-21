@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildAutoLinkNames, buildSlugIndex, normalizeKey, parseEntityFile, resolveTarget } from "./entities";
+import {
+  buildAutoLinkNames,
+  buildEntityTree,
+  buildSlugIndex,
+  extractSnippet,
+  normalizeKey,
+  parseEntityFile,
+  resolveTarget
+} from "./entities";
 
 describe("parseEntityFile", () => {
   it("derives the slug from the filename", () => {
@@ -86,6 +94,11 @@ describe("parseEntityFile", () => {
     const notSecret = parseEntityFile("wiki/y.md", "---\ntitle: Y\n---\n");
     expect(notSecret.frontmatter.secret).toBeUndefined();
   });
+
+  it("parses a parent slug, trimmed", () => {
+    const entity = parseEntityFile("wiki/x.md", "---\nparent: old-port \n---\n");
+    expect(entity.frontmatter.parent).toBe("old-port");
+  });
 });
 
 describe("normalizeKey", () => {
@@ -121,5 +134,62 @@ describe("buildAutoLinkNames", () => {
   it("excludes names shorter than the minimum auto-link length", () => {
     const entities = [parseEntityFile("wiki/rok.md", "---\ntitle: Rok\n---\n")];
     expect(buildAutoLinkNames(entities)).toEqual([]);
+  });
+});
+
+describe("extractSnippet", () => {
+  it("returns an excerpt around the match, original casing preserved", () => {
+    const snippet = extractSnippet("The merchant seems trustworthy enough, or so he claims.", "trustworthy");
+    expect(snippet.includes("trustworthy")).toBe(true);
+    expect(snippet.includes("…")).toBe(false); // short text, whole thing fits within the radius
+  });
+
+  it("adds an ellipsis on the side(s) that got truncated", () => {
+    const long = `${"a".repeat(100)} needle ${"b".repeat(100)}`;
+    const snippet = extractSnippet(long, "needle");
+    expect(snippet.startsWith("…")).toBe(true);
+    expect(snippet.endsWith("…")).toBe(true);
+  });
+
+  it("returns an empty string when there is no match", () => {
+    expect(extractSnippet("Nothing relevant here.", "dragon")).toBe("");
+  });
+
+  it("matches case-insensitively", () => {
+    expect(extractSnippet("The Dragon sleeps.", "dragon").includes("Dragon")).toBe(true);
+  });
+});
+
+describe("buildEntityTree", () => {
+  it("nests a child under its parent", () => {
+    const parent = parseEntityFile("wiki/old-port.md", "---\ntitle: Old Port\ntype: place\n---\n");
+    const child = parseEntityFile("wiki/docks.md", "---\ntitle: Docks\ntype: place\nparent: old-port\n---\n");
+    const { roots, childrenBySlug } = buildEntityTree([parent, child]);
+
+    expect(roots).toEqual([parent]);
+    expect(childrenBySlug.get("old-port")).toEqual([child]);
+  });
+
+  it("falls back to a root when the parent slug doesn't exist in the given list", () => {
+    const orphan = parseEntityFile("wiki/x.md", "---\nparent: nowhere\n---\n");
+    const { roots, childrenBySlug } = buildEntityTree([orphan]);
+    expect(roots).toEqual([orphan]);
+    expect(childrenBySlug.size).toBe(0);
+  });
+
+  it("breaks a two-entity cycle by making both roots, rather than dropping either", () => {
+    const a = parseEntityFile("wiki/a.md", "---\ntitle: A\nparent: b\n---\n");
+    const b = parseEntityFile("wiki/b.md", "---\ntitle: B\nparent: a\n---\n");
+    const { roots, childrenBySlug } = buildEntityTree([a, b]);
+
+    expect(roots.map(e => e.slug).sort()).toEqual(["a", "b"]);
+    expect(childrenBySlug.size).toBe(0);
+  });
+
+  it("treats a self-referencing parent as a root, not an infinite loop", () => {
+    const selfParent = parseEntityFile("wiki/x.md", "---\nparent: x\n---\n");
+    const { roots, childrenBySlug } = buildEntityTree([selfParent]);
+    expect(roots).toEqual([selfParent]);
+    expect(childrenBySlug.size).toBe(0);
   });
 });
