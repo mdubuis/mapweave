@@ -48,6 +48,7 @@ import {
 } from "@/wiki/map-bridge";
 import { insertMapRefBlock } from "@/wiki/map-ref-patch";
 import { renderMarkdown } from "@/wiki/markdown";
+import { applyMarkdownCommand, type MarkdownCommand } from "@/wiki/markdown-edit-commands";
 import { parseObjective, parseWeightedEntry, rollEncounter } from "@/wiki/scenario";
 import { hasSecretContent, stripSecrets } from "@/wiki/secrets";
 import {
@@ -587,6 +588,18 @@ function renderEditorView(slug: string): void {
         <label class="preview-toggle"><input type="checkbox" id="preview-toggle" checked /> Preview</label>
       </div>
     </header>
+    <div id="editor-format-bar" class="editor-format-bar">
+      <button type="button" data-command="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+      <button type="button" data-command="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+      <button type="button" data-command="heading" title="Heading">H</button>
+      <button type="button" data-command="bulletList" title="Bullet list">•</button>
+      <button type="button" data-command="numberedList" title="Numbered list">1.</button>
+      <button type="button" data-command="quote" title="Quote">"</button>
+      <button type="button" data-command="code" title="Inline code">&lt;/&gt;</button>
+      <button type="button" data-command="codeBlock" title="Code block">{ }</button>
+      <button type="button" data-command="link" title="Link (Ctrl+K)">🔗</button>
+      <button type="button" data-command="wikilink" title="Wikilink">[[ ]]</button>
+    </div>
     <div id="editor-split">
       <textarea id="editor-textarea" spellcheck="false">${escapeForTextarea(raw)}</textarea>
       <article id="editor-preview" class="entity-body"></article>
@@ -610,6 +623,34 @@ function renderEditorView(slug: string): void {
   }
   updatePreview();
   textarea.addEventListener("input", debounceTrailing(updatePreview, 200));
+
+  function applyFormatCommand(command: MarkdownCommand): void {
+    const result = applyMarkdownCommand(command, {
+      value: textarea.value,
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd
+    });
+    textarea.value = result.value;
+    textarea.selectionStart = result.start;
+    textarea.selectionEnd = result.end;
+    textarea.focus();
+    updatePreview();
+  }
+
+  el<HTMLElement>("editor-format-bar").addEventListener("click", event => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-command]");
+    if (button) applyFormatCommand(button.dataset.command as MarkdownCommand);
+  });
+
+  // Standard editor conventions — the browser's own Ctrl/Cmd+B/I/K (bold/italic/bookmark-ish)
+  // default actions don't apply inside a plain textarea, so preventDefault() here is harmless
+  textarea.addEventListener("keydown", event => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const command = { b: "bold", i: "italic", k: "link" }[event.key] as MarkdownCommand | undefined;
+    if (!command) return;
+    event.preventDefault();
+    applyFormatCommand(command);
+  });
 
   el<HTMLInputElement>("preview-toggle").addEventListener("change", event => {
     el<HTMLElement>("editor-split").classList.toggle("preview-hidden", !(event.target as HTMLInputElement).checked);

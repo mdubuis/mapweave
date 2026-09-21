@@ -376,6 +376,19 @@ body {
   cursor: pointer;
 }
 
+.editor-format-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+.editor-format-bar button {
+  min-width: 2rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
 #editor-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
