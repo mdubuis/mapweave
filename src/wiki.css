@@ -580,3 +580,17 @@ button:hover {
 .session-log .summary {
   margin: 0.25rem 0 0;
 }
+
+.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+}
+.timeline li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.timeline .summary,
+.timeline .hook {
+  margin: 0.25rem 0 0;
+}

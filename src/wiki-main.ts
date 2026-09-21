@@ -137,6 +137,7 @@ type Route =
   | { view: "new"; title: string; mapRef?: MapRef }
   | { view: "quests" }
   | { view: "sessions" }
+  | { view: "timeline" }
   | { view: "choose-world" };
 
 function currentRoute(): Route {
@@ -144,6 +145,7 @@ function currentRoute(): Route {
   if (hash.startsWith("entity/")) return { view: "entity", slug: decodeURIComponent(hash.slice("entity/".length)) };
   if (hash.startsWith("quests")) return { view: "quests" };
   if (hash.startsWith("sessions")) return { view: "sessions" };
+  if (hash.startsWith("timeline")) return { view: "timeline" };
   if (hash.startsWith("choose-world")) return { view: "choose-world" };
   if (hash.startsWith("new")) {
     const params = new URLSearchParams(hash.split("?")[1] ?? "");
@@ -697,7 +699,10 @@ function renderHomeView(): void {
 
 function visibleEntitiesOfType(type: string): WikiEntity[] {
   return entities.filter(
-    entity => entity.frontmatter.type === type && (!activeEra || isEntityInEra(entity, activeEra))
+    entity =>
+      entity.frontmatter.type === type &&
+      (!activeEra || isEntityInEra(entity, activeEra)) &&
+      (viewMode !== "player" || !entity.frontmatter.secret)
   );
 }
 
@@ -767,6 +772,54 @@ function renderSessionLogView(): void {
   `;
 }
 
+const OTHER_GROUP = "Other";
+
+/** Chronological event timeline — `type: event` entities sorted by `order` (entities without one
+ *  sort last, by title, same repli as renderSessionLogView), then grouped by `group` (see
+ *  wiki/SCHEMA.md) for display. Groups are shown in the order each first appears in the sorted
+ *  list, not alphabetically, so the sections themselves stay roughly chronological too. Not a real
+ *  calendar — `date` is free-form display text, never parsed (see WikiFrontmatter.date). */
+function renderTimelineView(): void {
+  const events = visibleEntitiesOfType("event").sort((a, b) => {
+    const ao = a.frontmatter.order;
+    const bo = b.frontmatter.order;
+    if (ao !== undefined && bo !== undefined) return ao - bo;
+    if (ao !== undefined) return -1;
+    if (bo !== undefined) return 1;
+    return a.frontmatter.title.localeCompare(b.frontmatter.title);
+  });
+
+  const groups = new Map<string, WikiEntity[]>();
+  for (const event of events) {
+    const group = event.frontmatter.group?.trim() || OTHER_GROUP;
+    const list = groups.get(group) ?? [];
+    list.push(event);
+    groups.set(group, list);
+  }
+
+  const sections = [...groups.entries()]
+    .map(([group, items]) => {
+      const rows = items
+        .map(event => {
+          const date = event.frontmatter.date ? ` <span class="muted">(${event.frontmatter.date})</span>` : "";
+          const summary = event.frontmatter.summary
+            ? `<p class="summary">${event.frontmatter.summary}</p>`
+            : event.frontmatter.hook
+              ? `<p class="hook">${event.frontmatter.hook}</p>`
+              : "";
+          return `<li>${entityLink(event)}${date}${summary}</li>`;
+        })
+        .join("");
+      return `<div class="entity-group"><h2>${group}</h2><ul class="timeline">${rows}</ul></div>`;
+    })
+    .join("");
+
+  el<HTMLElement>("content").innerHTML = `
+    <h1>Timeline</h1>
+    ${events.length ? sections : `<p class="muted">No events yet — create one with type "event".</p>`}
+  `;
+}
+
 function render(): void {
   const route = currentRoute();
   renderEraSelect();
@@ -775,6 +828,7 @@ function render(): void {
   else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
   else if (route.view === "quests") renderQuestBoardView();
   else if (route.view === "sessions") renderSessionLogView();
+  else if (route.view === "timeline") renderTimelineView();
   else if (route.view === "choose-world") renderChooseWorldView();
   else renderHomeView();
 }

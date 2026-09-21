@@ -204,6 +204,29 @@ map state; a session is what a group actually played, in real order, regardless 
 in-fiction time a session covers. The **Session log** view (`#/sessions`) lists every session
 sorted by `number`.
 
+### Events (timeline) — `type: event`
+
+```yaml
+---
+title: The Hollow Emperor emerges
+type: event
+order: 1                # sort position in the #/timeline view — lower comes first
+date: 492 CE             # free-form, display only, never parsed (see below)
+group: Adversaries        # free-form category for grouping in the timeline view
+summary: A shadow rises from the ruins of the old capital.
+relations:
+  involves: the-hollow-emperor
+---
+```
+
+The **Timeline** view (`#/timeline`) lists every `event` entity sorted by `order`, grouped into
+sections by `group` (entities without one land in an "Other" section). `order` and `group` are
+both optional — an event with neither still shows up, sorted last, in "Other". Like a session's
+`date`, an event's `date` is **free-form text, never parsed** — there is no real calendar engine
+here (custom calendars, date arithmetic across arbitrary month/day lengths): if you write `492 CE`
+and another event `January 10th, 1201 CE`, nothing checks that they're actually in the right
+order relative to each other — `order` is what controls sequence, `date` is just a label.
+
 `[[slug]]` or `[[slug|display text]]` anywhere in the body. Resolution is case-insensitive and
 matches against each file's slug and its `aliases`. A link that resolves nowhere still renders —
 as a distinctly styled "missing page" link — rather than breaking the page; Phase 3 extends this

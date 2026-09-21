@@ -26,7 +26,8 @@ export interface WikiFrontmatter {
   relations?: Record<string, string>;
   map_ref?: MapRefsByEra;
   eras?: Record<string, EraOverride>;
-  /** "era"-type entities only: sort order in the timeline */
+  /** Sort position: for "era"-type entities, position in the era timeline; for "event"-type
+   *  entities, position in the #/timeline view (wiki-main.ts's renderTimelineView) */
   order?: number;
   /** "era"-type entities only: filename under public/maps/ for this era's full map snapshot */
   map_file?: string;
@@ -51,8 +52,14 @@ export interface WikiFrontmatter {
   table?: string[];
   /** Session-log entities: sort order for the session log view */
   number?: number;
-  /** Session-log entities: free-form date string (in-fiction or real-world), display only */
+  /** Free-form date string (in-fiction or real-world), display only, never parsed — used by
+   *  session-log entities and by "event"-type entities in the #/timeline view. Real calendar math
+   *  (custom calendars, date arithmetic) is explicitly out of scope, see wiki/SCHEMA.md. */
   date?: string;
+  /** "event"-type entities: a free-form category for the #/timeline view's grouping (e.g.
+   *  "Adversaries", "Civics") — entities without one land in an "Other" group rather than being
+   *  rejected. See wiki/SCHEMA.md. */
+  group?: string;
   /** Hides this whole entity in player view (see wiki-main.ts's viewMode) — a local display filter
    *  for the GM to flip before sharing their screen, not real access control. A `:::secret` block
    *  in the body (see wiki/secrets.ts) hides part of an otherwise-visible page instead of all of it. */

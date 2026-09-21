@@ -99,6 +99,20 @@ describe("parseEntityFile", () => {
     const entity = parseEntityFile("wiki/x.md", "---\nparent: old-port \n---\n");
     expect(entity.frontmatter.parent).toBe("old-port");
   });
+
+  it("parses an event's order/date/group", () => {
+    const raw =
+      "---\ntitle: The Hollow Emperor emerges\ntype: event\norder: 1\ndate: 492 CE\ngroup: Adversaries\n---\n";
+    const entity = parseEntityFile("wiki/x.md", raw);
+    expect(entity.frontmatter.order).toBe(1);
+    expect(entity.frontmatter.date).toBe("492 CE");
+    expect(entity.frontmatter.group).toBe("Adversaries");
+  });
+
+  it("drops a blank group rather than keeping an empty string", () => {
+    const entity = parseEntityFile("wiki/x.md", '---\ngroup: " "\n---\n');
+    expect(entity.frontmatter.group).toBeUndefined();
+  });
 });
 
 describe("normalizeKey", () => {

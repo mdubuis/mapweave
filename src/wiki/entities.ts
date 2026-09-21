@@ -99,7 +99,8 @@ function toFrontmatter(slug: string, data: Record<string, unknown>): WikiFrontma
     number: typeof data.number === "number" ? data.number : undefined,
     date: typeof data.date === "string" ? data.date : undefined,
     secret: data.secret === true ? true : undefined,
-    parent: typeof data.parent === "string" && data.parent.trim() ? data.parent.trim() : undefined
+    parent: typeof data.parent === "string" && data.parent.trim() ? data.parent.trim() : undefined,
+    group: typeof data.group === "string" && data.group.trim() ? data.group.trim() : undefined
   };
 }
 

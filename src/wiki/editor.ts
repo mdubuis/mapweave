@@ -132,6 +132,7 @@ function scenarioTemplateBlock(type: string): string {
   if (type === "quest") return "status: open\nobjectives:\n  - [ ] \n";
   if (type === "encounter-table") return "table:\n  - \n";
   if (type === "session-log") return "number: 1\ndate: \n";
+  if (type === "event") return "order: \ndate: \ngroup: \n";
   return "";
 }
 
