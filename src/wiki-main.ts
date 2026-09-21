@@ -17,10 +17,14 @@ import {
 } from "@/wiki/db-entities";
 import {
   createEntity,
+  deleteTemplate,
   isFileSystemAccessSupported,
   loadFromDirectory,
+  loadTemplates,
+  type PageTemplate,
   pickWikiDirectory,
-  saveEntity
+  saveEntity,
+  saveTemplate
 } from "@/wiki/editor";
 import {
   type AutoLinkName,
@@ -101,42 +105,15 @@ const VIEW_MODE_STORAGE_KEY = "mapweave.viewMode";
  *  app has no auth/multi-user concept at all — see MAPWEAVE.md). */
 let viewMode: "gm" | "player" = localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "player" ? "player" : "gm";
 
-/**
- * User-saved page templates — a starter you pick when creating a page, beyond the built-in per-type
- * ones (scenarioTemplateBlock in editor.ts). Stored in localStorage, not the wiki folder: unlike
- * the wiki's own content, templates aren't part of what gets committed/shared — a deliberate scope
- * limit, see the approved plan. `raw` is a complete file's text, captured verbatim when saved
- * ("Save as template" in renderEditorView); applying it just overwrites its `title:` line
- * (createEntity's templateRaw param), never a reparse+reserialize.
- */
-interface PageTemplate {
-  type: string;
-  raw: string;
-}
+/** User-saved page templates — a starter you pick when creating a page, beyond the built-in
+ *  per-type ones (scenarioTemplateBlock in editor.ts). Live in wiki/templates/ as real files
+ *  (wiki/editor.ts's loadTemplates/saveTemplate/deleteTemplate), reloaded alongside the rest of the
+ *  directory in reloadFromDirectory — same file-based storage as the wiki's own content, unlike
+ *  most of this app's other localStorage-backed UI state. */
+let templates: PageTemplate[] = [];
 
-const TEMPLATE_STORAGE_PREFIX = "mapweave.template.";
-
-function listTemplateNames(): string[] {
-  const names: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(TEMPLATE_STORAGE_PREFIX)) names.push(key.slice(TEMPLATE_STORAGE_PREFIX.length));
-  }
-  return names.sort();
-}
-
-function loadTemplate(name: string): PageTemplate | undefined {
-  const raw = localStorage.getItem(TEMPLATE_STORAGE_PREFIX + name);
-  if (!raw) return undefined;
-  try {
-    return JSON.parse(raw) as PageTemplate;
-  } catch {
-    return undefined;
-  }
-}
-
-function templateNamesForType(type: string): string[] {
-  return listTemplateNames().filter(name => loadTemplate(name)?.type === type);
+function templatesForType(type: string): PageTemplate[] {
+  return templates.filter(template => template.type === type);
 }
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -187,10 +164,11 @@ function currentRoute(): Route {
 
 async function reloadFromDirectory(): Promise<void> {
   if (!dirHandle) return;
-  const source = await loadFromDirectory(dirHandle);
+  const [source, loadedTemplates] = await Promise.all([loadFromDirectory(dirHandle), loadTemplates(dirHandle)]);
   fileEntities = source.entities;
   handles = source.handles;
   rawContents = source.raw;
+  templates = loadedTemplates;
   mergeEntitySources();
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
@@ -642,11 +620,11 @@ function renderEditorView(slug: string): void {
     await reloadFromDirectory();
     renderEntityView(slug);
   });
-  el<HTMLButtonElement>("save-template-btn").addEventListener("click", () => {
+  el<HTMLButtonElement>("save-template-btn").addEventListener("click", async () => {
     const name = window.prompt("Template name:");
     if (!name?.trim()) return;
-    const type = el<HTMLSelectElement>("editor-type").value;
-    localStorage.setItem(TEMPLATE_STORAGE_PREFIX + name.trim(), JSON.stringify({ type, raw: textarea.value }));
+    await saveTemplate(dirHandle!, name.trim(), textarea.value);
+    templates = await loadTemplates(dirHandle!);
   });
 }
 
@@ -679,9 +657,9 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
 
   function refreshTemplateOptions(): void {
     const type = el<HTMLSelectElement>("new-type").value;
-    const names = templateNamesForType(type);
+    const matching = templatesForType(type);
     el<HTMLSelectElement>("new-template").innerHTML =
-      `<option value="">(blank)</option>${names.map(name => `<option value="${name}">${name}</option>`).join("")}`;
+      `<option value="">(blank)</option>${matching.map(t => `<option value="${t.name}">${t.name}</option>`).join("")}`;
     el<HTMLButtonElement>("delete-template-btn").hidden = true;
   }
   refreshTemplateOptions();
@@ -690,16 +668,19 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
   el<HTMLSelectElement>("new-template").addEventListener("change", event => {
     el<HTMLButtonElement>("delete-template-btn").hidden = !(event.target as HTMLSelectElement).value;
   });
-  el<HTMLButtonElement>("delete-template-btn").addEventListener("click", () => {
+  el<HTMLButtonElement>("delete-template-btn").addEventListener("click", async () => {
     const name = el<HTMLSelectElement>("new-template").value;
-    if (name) localStorage.removeItem(TEMPLATE_STORAGE_PREFIX + name);
+    if (name) {
+      await deleteTemplate(dirHandle!, name);
+      templates = await loadTemplates(dirHandle!);
+    }
     refreshTemplateOptions();
   });
 
   el<HTMLButtonElement>("create-btn").addEventListener("click", async () => {
     const type = el<HTMLSelectElement>("new-type").value;
     const templateName = el<HTMLSelectElement>("new-template").value;
-    const templateRaw = templateName ? loadTemplate(templateName)?.raw : undefined;
+    const templateRaw = templateName ? templates.find(t => t.name === templateName)?.raw : undefined;
     const { slug } = await createEntity(dirHandle!, title, type, mapRef, activeEra ?? DEFAULT_ERA, templateRaw);
     await reloadFromDirectory();
     location.hash = `#/entity/${encodeURIComponent(slug)}`;

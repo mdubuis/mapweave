@@ -249,9 +249,10 @@ from "Create page," pick that template from the "Template:" dropdown (filtered t
 selected) instead of starting blank — only the title changes, everything else in the template
 carries over verbatim.
 
-Templates are stored in this browser's `localStorage`, **not** in the `wiki/` folder — unlike the
-wiki's own content, they aren't files, so they don't travel with the folder if you move it, share
-it, or check it into version control. A deliberate scope limit, not an oversight.
+Templates live under `wiki/templates/` as ordinary Markdown files (frontmatter + body, same shape
+as any entity) — real files, so they travel with the folder like everything else, including under
+version control. That folder is excluded from the entity list itself, so a template never shows up
+as a page in the sidebar, search, or graph.
 
 ## Markdown support
 

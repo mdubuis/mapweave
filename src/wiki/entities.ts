@@ -1,10 +1,13 @@
 import { parseFrontmatter } from "./frontmatter";
 import type { EraOverride, MapRef, MapRefKind, MapRefsByEra, WikiEntity, WikiFrontmatter } from "./types";
 
-const files = import.meta.glob("../../wiki/**/*.md", { eager: true, query: "?raw", import: "default" }) as Record<
-  string,
-  string
->;
+// templates/ is excluded — it holds reusable page starters (wiki/editor.ts's loadTemplates), not
+// real entities; it shouldn't show up in the sidebar/search/graph.
+const files = import.meta.glob(["../../wiki/**/*.md", "!../../wiki/templates/**"], {
+  eager: true,
+  query: "?raw",
+  import: "default"
+}) as Record<string, string>;
 
 function slugFromPath(path: string): string {
   return (path.split("/").pop() ?? path).replace(/\.md$/, "");
