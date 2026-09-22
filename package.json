@@ -21,6 +21,7 @@
     "test:e2e": "playwright test",
     "test:scripts": "node --test scripts/*.test.mjs",
     "lint": "biome check --write",
+    "audit-ids": "node scripts/audit-id-collisions.mjs",
     "sync-version": "node scripts/sync-version.js",
     "stamp-assets": "node scripts/stamp-assets.js",
     "prepare": "simple-git-hooks"
