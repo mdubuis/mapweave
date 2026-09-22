@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Phase 1 spike — legacy map engine inside a Shadow DOM</title>
+  </head>
+  <body style="font-family: system-ui, sans-serif; margin: 1rem">
+    <h1>Phase 1 spike — legacy map engine inside a Shadow DOM</h1>
+    <p>
+      Dev-only harness for the Phase 6 single-DOM-merge plan (see <code>MAPWEAVE.md</code>). Boots the
+      <em>real</em> map engine — the actual <code>map.html</code> body, the actual classic scripts, the
+      actual <code>boot()</code> — inside a shadow root, using
+      <code>src/services/shadow-dom-bridge.ts</code>'s light-DOM-first fallback patch. Not wired into the
+      production app; not part of the build (excluded from <code>vite.config.ts</code>'s
+      <code>rollupOptions.input</code>) — only reachable via <code>npm run dev</code>.
+    </p>
+    <p><strong>Manual verification checklist</strong> (see console for progress/errors):</p>
+    <ol>
+      <li>No console errors during boot.</li>
+      <li>The map actually draws inside the boxed area below (not blank, not drawn outside the box).</li>
+      <li>
+        Open a dialog that uses jQuery UI (e.g. click a burg to open the burg editor, or use a menu that
+        opens an options dialog) — it should render <em>inside</em> the boxed area, correctly styled, not
+        floating unstyled at the bottom of this page.
+      </li>
+      <li>Pan/zoom the map — no visible double-transform/offset glitch.</li>
+      <li>
+        In devtools, inspect <code>#spike-host</code> → open its shadow root → confirm the map SVG,
+        Leaflet container, and any open dialog all live inside it, not as light-DOM children of
+        <code>&lt;body&gt;</code>.
+      </li>
+    </ol>
+    <div id="spike-host" style="border: 2px solid #c00; height: 80vh; position: relative; overflow: hidden"></div>
+    <script type="module" src="./map-in-shadow.ts"></script>
+  </body>
+</html>

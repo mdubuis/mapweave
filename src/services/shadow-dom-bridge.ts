@@ -17,8 +17,12 @@
 
 const registeredShadowRoots = new Set<ShadowRoot>();
 let patched = false;
-const originalGetElementById = Document.prototype.getElementById;
-const originalQuerySelector = Document.prototype.querySelector;
+// Captured lazily, inside installShadowDomBridge() — not at module load time. This module is
+// reachable from many tests that run in vitest's default "node" environment (no real `Document`
+// global at all, see test-setup.ts), via leaflet-map.ts's ensureContainer() importing
+// getPrimaryMountRoot(); touching `Document.prototype` at import time broke every one of them.
+let originalGetElementById: typeof Document.prototype.getElementById | undefined;
+let originalQuerySelector: typeof Document.prototype.querySelector | undefined;
 
 /** Registers a shadow root as a fallback target for light-DOM id/selector misses. Call once per
  *  hosted shadow root (e.g. when the map engine's custom element connects); unregister on teardown
@@ -29,6 +33,19 @@ export function registerShadowRoot(root: ShadowRoot): void {
 
 export function unregisterShadowRoot(root: ShadowRoot): void {
   registeredShadowRoots.delete(root);
+}
+
+/** The mount point legacy code should insert newly-created elements into, instead of assuming
+ *  `document.body` directly (the monkeypatch above only fixes *lookups*; a direct `document.body`
+ *  write — e.g. leaflet-map.ts's `ensureContainer()` — needs to call this instead). Returns the
+ *  most recently registered shadow root, or `document.body` if none is registered (so this stays a
+ *  no-op outside the shadow-hosted context — e.g. map.html opened standalone, with no shell). Only
+ *  one shadow root is ever registered in practice today (the map engine's); if that changes, this
+ *  single-"primary" assumption needs revisiting. */
+export function getPrimaryMountRoot(): ParentNode {
+  let last: ShadowRoot | undefined;
+  for (const root of registeredShadowRoots) last = root;
+  return last ?? document.body;
 }
 
 function findInShadowRootsById(id: string): HTMLElement | null {
@@ -47,14 +64,19 @@ export function installShadowDomBridge(): void {
   if (patched) return;
   patched = true;
 
+  originalGetElementById = Document.prototype.getElementById;
+  originalQuerySelector = Document.prototype.querySelector;
+  const realGetElementById = originalGetElementById;
+  const realQuerySelector = originalQuerySelector;
+
   Document.prototype.getElementById = function (this: Document, id: string): HTMLElement | null {
-    const lightHit = originalGetElementById.call(this, id);
+    const lightHit = realGetElementById.call(this, id);
     if (lightHit) return lightHit;
     return findInShadowRootsById(id);
   };
 
   Document.prototype.querySelector = function (this: Document, selector: string): Element | null {
-    const lightHit = originalQuerySelector.call(this, selector);
+    const lightHit = realQuerySelector.call(this, selector);
     if (lightHit) return lightHit;
 
     const bareId = BARE_ID_SELECTOR.exec(selector);
@@ -67,8 +89,8 @@ export function installShadowDomBridge(): void {
  *  registered shadow roots. Not used in production code — the patch is meant to stay installed for
  *  the page's lifetime once the shell boots. */
 export function _resetShadowDomBridgeForTests(): void {
-  Document.prototype.getElementById = originalGetElementById;
-  Document.prototype.querySelector = originalQuerySelector;
+  if (originalGetElementById) Document.prototype.getElementById = originalGetElementById;
+  if (originalQuerySelector) Document.prototype.querySelector = originalQuerySelector;
   patched = false;
   registeredShadowRoots.clear();
 }

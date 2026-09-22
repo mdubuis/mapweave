@@ -2,6 +2,7 @@
 // (pack.cells.p / grid.points), never geographic — see MIGRATION.md's SRID 0 / L.CRS.Simple decision.
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { getPrimaryMountRoot } from "@/services/shadow-dom-bridge";
 
 /**
  * The zoom range here is a linear scale factor (matches the app's existing [1, 20] `viewport.scale`),
@@ -98,7 +99,10 @@ function ensureContainer(): HTMLDivElement {
   if (!container) {
     container = document.createElement("div");
     container.id = "leaflet-root";
-    document.body.prepend(container);
+    // getPrimaryMountRoot() is document.body unless the map engine is hosted inside a shadow root
+    // (see shadow-dom-bridge.ts) — a direct document.body write, unlike a lookup, isn't covered by
+    // that module's monkeypatch, so this needs to ask explicitly instead of assuming document.body.
+    getPrimaryMountRoot().prepend(container);
   }
   return container;
 }

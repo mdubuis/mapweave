@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   _resetShadowDomBridgeForTests,
+  getPrimaryMountRoot,
   installShadowDomBridge,
   registerShadowRoot,
   unregisterShadowRoot
@@ -144,6 +145,33 @@ describe("installShadowDomBridge — idempotence", () => {
     registerShadowRoot(shadow);
 
     expect(document.getElementById("double-install")).toBe(shadowEl);
+  });
+});
+
+describe("getPrimaryMountRoot", () => {
+  it("returns document.body when no shadow root is registered", () => {
+    expect(getPrimaryMountRoot()).toBe(document.body);
+  });
+
+  it("returns the registered shadow root once one exists", () => {
+    const { shadow } = attachShadowHost();
+    registerShadowRoot(shadow);
+    expect(getPrimaryMountRoot()).toBe(shadow);
+  });
+
+  it("returns the most recently registered shadow root when more than one is registered", () => {
+    const first = attachShadowHost();
+    const second = attachShadowHost();
+    registerShadowRoot(first.shadow);
+    registerShadowRoot(second.shadow);
+    expect(getPrimaryMountRoot()).toBe(second.shadow);
+  });
+
+  it("falls back to document.body again once the shadow root is unregistered", () => {
+    const { shadow } = attachShadowHost();
+    registerShadowRoot(shadow);
+    unregisterShadowRoot(shadow);
+    expect(getPrimaryMountRoot()).toBe(document.body);
   });
 });
 
