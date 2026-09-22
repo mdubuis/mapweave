@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutoLinkNames,
   buildEntityTree,
+  buildPageTree,
   buildSlugIndex,
+  effectiveTabs,
   extractSnippet,
   normalizeKey,
   parseEntityFile,
@@ -26,6 +28,26 @@ describe("parseEntityFile", () => {
     const raw = "---\ntitle: Old Port\nmap_ref:\n  founding:\n    kind: burg\n    id: 42\n    name: Old Port\n---\n";
     const entity = parseEntityFile("wiki/old-port.md", raw);
     expect(entity.frontmatter.map_ref).toEqual({ founding: { kind: "burg", id: 42, name: "Old Port" } });
+  });
+
+  it("parses a valid tab-id-keyed tabs block", () => {
+    const raw = "---\ntitle: City\ntabs:\n  overview:\n    type: wiki\n  atlas:\n    type: map\n    mapId: 17\n---\n";
+    const entity = parseEntityFile("wiki/city.md", raw);
+    expect(entity.frontmatter.tabs).toEqual({
+      overview: { type: "wiki" },
+      atlas: { type: "map", mapId: 17 }
+    });
+  });
+
+  it("drops a tab entry with an invalid/missing type rather than the whole tabs block", () => {
+    const raw = "---\ntabs:\n  good:\n    type: board\n  bad:\n    title: no type here\n---\n";
+    const entity = parseEntityFile("wiki/x.md", raw);
+    expect(entity.frontmatter.tabs).toEqual({ good: { type: "board" } });
+  });
+
+  it("leaves tabs undefined when the frontmatter has none", () => {
+    const entity = parseEntityFile("wiki/plain.md", "---\ntitle: Plain\n---\n");
+    expect(entity.frontmatter.tabs).toBeUndefined();
   });
 
   it("drops an era entry with an unknown kind rather than passing it through untyped", () => {
@@ -205,5 +227,44 @@ describe("buildEntityTree", () => {
     const { roots, childrenBySlug } = buildEntityTree([selfParent]);
     expect(roots).toEqual([selfParent]);
     expect(childrenBySlug.size).toBe(0);
+  });
+});
+
+describe("buildPageTree", () => {
+  it("nests a child under a parent of a DIFFERENT type, unlike buildEntityTree's per-type callers", () => {
+    const city = parseEntityFile("wiki/old-port.md", "---\ntitle: Old Port\ntype: place\n---\n");
+    const board = parseEntityFile(
+      "wiki/old-port-board.md",
+      "---\ntitle: Old Port — mood board\ntype: board\nparent: old-port\n---\n"
+    );
+    const { roots, childrenBySlug } = buildPageTree([city, board]);
+
+    expect(roots).toEqual([city]);
+    expect(childrenBySlug.get("old-port")).toEqual([board]);
+  });
+
+  it("still breaks cycles across types the same way buildEntityTree does", () => {
+    const a = parseEntityFile("wiki/a.md", "---\ntitle: A\ntype: place\nparent: b\n---\n");
+    const b = parseEntityFile("wiki/b.md", "---\ntitle: B\ntype: board\nparent: a\n---\n");
+    const { roots, childrenBySlug } = buildPageTree([a, b]);
+
+    expect(roots.map(e => e.slug).sort()).toEqual(["a", "b"]);
+    expect(childrenBySlug.size).toBe(0);
+  });
+});
+
+describe("effectiveTabs", () => {
+  it("treats an entity with no tabs field as one implicit wiki tab", () => {
+    const entity = parseEntityFile("wiki/plain.md", "---\ntitle: Plain\n---\n");
+    expect(effectiveTabs(entity.frontmatter)).toEqual([{ id: "wiki", type: "wiki" }]);
+  });
+
+  it("returns each declared tab with its id attached", () => {
+    const raw = "---\ntabs:\n  overview:\n    type: wiki\n  atlas:\n    type: map\n    mapId: 17\n---\n";
+    const entity = parseEntityFile("wiki/city.md", raw);
+    expect(effectiveTabs(entity.frontmatter)).toEqual([
+      { id: "overview", type: "wiki" },
+      { id: "atlas", type: "map", mapId: 17 }
+    ]);
   });
 });

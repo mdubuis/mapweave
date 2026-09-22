@@ -1,5 +1,14 @@
 import { parseFrontmatter } from "./frontmatter";
-import type { EraOverride, MapRef, MapRefKind, MapRefsByEra, WikiEntity, WikiFrontmatter } from "./types";
+import type {
+  EraOverride,
+  MapRef,
+  MapRefKind,
+  MapRefsByEra,
+  PageTabMeta,
+  PageTabs,
+  WikiEntity,
+  WikiFrontmatter
+} from "./types";
 
 // templates/ is excluded — it holds reusable page starters (wiki/editor.ts's loadTemplates), not
 // real entities; it shouldn't show up in the sidebar/search/graph.
@@ -43,6 +52,31 @@ function toMapRefsByEra(value: unknown): MapRefsByEra | undefined {
   for (const [era, entry] of Object.entries(value as Record<string, unknown>)) {
     const parsed = toMapRefEntry(entry);
     if (parsed) result[era] = parsed;
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+const PAGE_TAB_TYPES: PageTabMeta["type"][] = ["wiki", "map", "board"];
+
+function toTabEntry(value: unknown): PageTabMeta | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { type, title, mapId } = value as Record<string, unknown>;
+  if (typeof type !== "string" || !PAGE_TAB_TYPES.includes(type as PageTabMeta["type"])) return undefined;
+  return {
+    type: type as PageTabMeta["type"],
+    title: typeof title === "string" && title.trim() ? title.trim() : undefined,
+    mapId: typeof mapId === "number" ? mapId : undefined
+  };
+}
+
+/** tabs is a map of tab id -> PageTabMeta, same "keyed by string id, not an array" shape as
+ *  map_ref/MapRefsByEra — see wiki/types.ts's PageTabs doc comment for why. */
+function toTabs(value: unknown): PageTabs | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const result: PageTabs = {};
+  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+    const parsed = toTabEntry(entry);
+    if (parsed) result[id] = parsed;
   }
   return Object.keys(result).length ? result : undefined;
 }
@@ -100,7 +134,8 @@ function toFrontmatter(slug: string, data: Record<string, unknown>): WikiFrontma
     date: typeof data.date === "string" ? data.date : undefined,
     secret: data.secret === true ? true : undefined,
     parent: typeof data.parent === "string" && data.parent.trim() ? data.parent.trim() : undefined,
-    group: typeof data.group === "string" && data.group.trim() ? data.group.trim() : undefined
+    group: typeof data.group === "string" && data.group.trim() ? data.group.trim() : undefined,
+    tabs: toTabs(data.tabs)
   };
 }
 
@@ -201,6 +236,28 @@ export function buildEntityTree(entities: WikiEntity[]): EntityTree {
     }
   }
   return { roots, childrenBySlug };
+}
+
+/** Like buildEntityTree, but nests across ALL types at once — matching LegendKeeper's real tree
+ *  (confirmed from the user's own exported project): pages nest purely by `parent`, regardless of
+ *  node kind, not grouped by type first. buildEntityTree's "same-type" framing was always a caller
+ *  convention (pass one type-group's entities at a time), never enforced inside the function
+ *  itself — the parent/cycle logic only ever looks at slugs within the given list, so this is
+ *  genuinely the same, already-tested algorithm, just called with the whole entity list instead of
+ *  one type-group at a time. */
+export function buildPageTree(entities: WikiEntity[]): EntityTree {
+  return buildEntityTree(entities);
+}
+
+const IMPLICIT_WIKI_TAB_ID = "wiki";
+
+/** A page's tabs, with a stable id per tab — an entity with no `tabs` frontmatter (every entity
+ *  created before this field existed, and the common case going forward for a plain wiki page)
+ *  behaves as one implicit wiki tab, so nothing needs migrating. */
+export function effectiveTabs(frontmatter: WikiFrontmatter): Array<PageTabMeta & { id: string }> {
+  const tabs = frontmatter.tabs;
+  if (!tabs || Object.keys(tabs).length === 0) return [{ id: IMPLICIT_WIKI_TAB_ID, type: "wiki" }];
+  return Object.entries(tabs).map(([id, meta]) => ({ id, ...meta }));
 }
 
 /** Below this length, a title/alias is excluded from auto-linking (see markdown.ts's renderInline)

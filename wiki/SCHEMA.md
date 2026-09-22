@@ -77,6 +77,47 @@ state, or marker) fills in `kind`/`id`/`name`/era automatically; the map app res
 direction (map object → wiki page) by scanning all `wiki/**/*.md` files for a matching `map_ref`
 entry in the currently active era — see `src/wiki/map-link.ts`.
 
+### `tabs` — multi-tab pages (Phase 6)
+
+A page can bundle more than one tab — wiki prose, a board canvas, a linked map — behind one sidebar
+entry, matching LegendKeeper's own page model. Absent or empty means "one implicit wiki tab": every
+page created before this field existed keeps working unchanged, with no file migration.
+
+```yaml
+---
+title: Old Port
+tabs:
+  overview:
+    type: wiki
+  mood-board:
+    type: board
+    title: Mood board
+  atlas:
+    type: map
+    mapId: 17
+---
+```
+
+`tabs` is keyed by a stable tab id (`overview`, `mood-board`, `atlas` above) — the same "map keyed
+by string id, not an array of objects" shape `map_ref` already uses, because the hand-rolled
+YAML-lite parser (`src/wiki/frontmatter.ts`) can hold nested maps but not an array of objects. Each
+entry's `type` is `wiki`, `board`, or `map`; `title` overrides the tab's default label; `mapId` is
+meaningful for `type: map` tabs only (which `maps.id` — the Postgres-backed generated map — the tab
+shows).
+
+Tab **content** storage follows the id, not the type: the un-fenced Markdown body is always the
+`type: wiki` tab's content (there's still exactly one body per file); a `type: board` tab's items
+and connectors live in a ```` ```board:<tabId> ```` fenced JSON block — the same convention the
+standalone `type: board` page below uses, just keyed by tab id instead of singular, so a board tab
+and a whole-page board never collide (`src/wiki/tabs.ts`, `src/wiki/board.ts`'s
+`extractBoardDataForTab`/`replaceBoardBlockForTabInRaw`). A `type: map` tab needs no body storage at
+all — `mapId` in the frontmatter is the whole of it.
+
+The URL carries the active tab (`#/entity/<slug>?tab=<tabId>`), so a specific tab is linkable and
+survives a reload; switching tabs doesn't lose your place in the sidebar. A `type: map` tab's actual
+map view still opens through the existing slide-out map panel for now (`openMapPanel()`) — full
+inline map embedding inside the page is Phase 3's job (see `MAPWEAVE.md`), not built yet.
+
 ## Timeline (eras)
 
 An **era** is just a wiki entity with `type: era`, plus two fields the timeline reads:

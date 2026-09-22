@@ -8,7 +8,13 @@ import {
   select
 } from "d3";
 import { type BoardHandle, mountBoard } from "@/renderers/leaflet/board-canvas";
-import { type BoardData, extractBoardData, replaceBoardBlockInRaw } from "@/wiki/board";
+import {
+  type BoardData,
+  extractBoardData,
+  extractBoardDataForTab,
+  replaceBoardBlockForTabInRaw,
+  replaceBoardBlockInRaw
+} from "@/wiki/board";
 import {
   type ConnectedMapInfo,
   dbRefOf,
@@ -33,6 +39,7 @@ import {
   buildAutoLinkNames,
   buildEntityTree,
   buildSlugIndex,
+  effectiveTabs,
   extractSnippet,
   loadEntities,
   resolveTarget
@@ -58,6 +65,7 @@ import {
   type EdgeKind,
   type MapRef,
   type MapRefKind,
+  type PageTabMeta,
   type WikiEntity,
   type WikiGraph
 } from "@/wiki/types";
@@ -156,7 +164,7 @@ function typeOptionsHtml(selected: string): string {
 
 type Route =
   | { view: "list" }
-  | { view: "entity"; slug: string }
+  | { view: "entity"; slug: string; tab?: string }
   | { view: "new"; title: string; mapRef?: MapRef }
   | { view: "quests" }
   | { view: "sessions" }
@@ -165,7 +173,11 @@ type Route =
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
-  if (hash.startsWith("entity/")) return { view: "entity", slug: decodeURIComponent(hash.slice("entity/".length)) };
+  if (hash.startsWith("entity/")) {
+    const [slugPart, query] = hash.slice("entity/".length).split("?");
+    const tab = query ? (new URLSearchParams(query).get("tab") ?? undefined) : undefined;
+    return { view: "entity", slug: decodeURIComponent(slugPart), tab };
+  }
   if (hash.startsWith("quests")) return { view: "quests" };
   if (hash.startsWith("sessions")) return { view: "sessions" };
   if (hash.startsWith("timeline")) return { view: "timeline" };
@@ -479,7 +491,44 @@ function canPlaceOnMap(entity: WikiEntity): boolean {
   return true;
 }
 
-function renderEntityView(slug: string): void {
+/** The board toolbar + canvas container markup, shared by a whole-entity `type: board` page and a
+ *  multi-tab page's board tab — only how it's mounted afterward differs (see mountBoardView's
+ *  optional `tabId`). */
+function boardSectionHtml(slug: string, canEdit: boolean): string {
+  return `<div id="board-toolbar" class="board-toolbar">
+      ${
+        canEdit
+          ? `<button id="board-add-image-btn" type="button">Add image</button>
+            <button id="board-add-text-btn" type="button">Add text</button>
+            <label>Link page:
+              <select id="board-page-picker">${boardPagePickerOptions(slug)}</select>
+            </label>
+            <button id="board-add-page-btn" type="button">Link page</button>
+            <button id="board-connect-btn" type="button">Connect</button>
+            <button id="board-delete-btn" type="button">Delete</button>
+            <button id="board-save-btn" type="button">Save</button>`
+          : `<p class="muted">Read-only board</p>`
+      }
+    </div>
+    <div id="board-canvas-container" class="board-canvas-container"></div>`;
+}
+
+/** Tab bar for a multi-tab page (Phase 6) — only rendered when the entity has more than one tab;
+ *  a plain wiki page (the overwhelming majority, and every entity that predates this field) never
+ *  shows one. See wiki/entities.ts's effectiveTabs and wiki/types.ts's PageTabs. */
+function pageTabsHtml(slug: string, tabs: Array<PageTabMeta & { id: string }>, activeTabId: string): string {
+  if (tabs.length <= 1) return "";
+  const links = tabs
+    .map(tab => {
+      const label = tab.title ?? (tab.type === "wiki" ? "Wiki" : tab.type === "map" ? "Map" : "Board");
+      const active = tab.id === activeTabId ? " active" : "";
+      return `<a href="#/entity/${encodeURIComponent(slug)}?tab=${encodeURIComponent(tab.id)}" class="page-tab${active}">${label}</a>`;
+    })
+    .join("");
+  return `<nav class="page-tabs">${links}</nav>`;
+}
+
+function renderEntityView(slug: string, tabParam?: string): void {
   teardownBoard();
   const content = el<HTMLElement>("content");
   const entity = byslug(slug);
@@ -506,8 +555,19 @@ function renderEntityView(slug: string): void {
   const mapHref = mapViewHref(resolved.mapRef);
   const dbRef = dbRefOf(entity);
 
+  // Multi-tab pages (Phase 6): an entity with no explicit `tabs` frontmatter — every entity that
+  // predates this field, and the common case going forward for a plain wiki/board page — takes the
+  // exact code path this app has always used, completely unchanged below. Only a page that opts
+  // into `tabs` reaches the new tab-bar/tab-dispatch logic.
+  const hasExplicitTabs = Boolean(frontmatter.tabs && Object.keys(frontmatter.tabs).length > 0);
+  const tabs = hasExplicitTabs ? effectiveTabs(frontmatter) : [];
+  const activeTabId = hasExplicitTabs ? (tabParam && tabs.some(t => t.id === tabParam) ? tabParam : tabs[0].id) : "";
+  const activeTab = hasExplicitTabs ? tabs.find(t => t.id === activeTabId) : undefined;
+
   const isEncounterTable = frontmatter.type === "encounter-table" && (frontmatter.table?.length ?? 0) > 0;
-  const isBoard = frontmatter.type === "board";
+  const isBoard = !hasExplicitTabs && frontmatter.type === "board";
+  const isBoardTab = hasExplicitTabs && activeTab?.type === "board";
+  const isMapTab = hasExplicitTabs && activeTab?.type === "map";
   const hasSecrets = viewMode === "gm" && (frontmatter.secret || hasSecretContent(entity.body));
   const secretBadge = hasSecrets
     ? `<span class="secret-badge" title="Hidden from player view">${frontmatter.secret ? "secret page" : "has secrets"}</span>`
@@ -558,31 +618,28 @@ function renderEntityView(slug: string): void {
     ${renderStatsBlock(frontmatter.stats, frontmatter.statBlockSystem)}
     ${isEncounterTable ? `<section id="encounter-roller"></section>` : ""}
     ${renderRelations(frontmatter.relations)}
+    ${hasExplicitTabs ? pageTabsHtml(slug, tabs, activeTabId) : ""}
     ${
-      isBoard
-        ? `<div id="board-toolbar" class="board-toolbar">
-            ${
-              canEdit
-                ? `<button id="board-add-image-btn" type="button">Add image</button>
-                  <button id="board-add-text-btn" type="button">Add text</button>
-                  <label>Link page:
-                    <select id="board-page-picker">${boardPagePickerOptions(slug)}</select>
-                  </label>
-                  <button id="board-add-page-btn" type="button">Link page</button>
-                  <button id="board-connect-btn" type="button">Connect</button>
-                  <button id="board-delete-btn" type="button">Delete</button>
-                  <button id="board-save-btn" type="button">Save</button>`
-                : `<p class="muted">Read-only board</p>`
-            }
-          </div>
-          <div id="board-canvas-container" class="board-canvas-container"></div>`
-        : `<article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>`
+      isBoard || isBoardTab
+        ? boardSectionHtml(slug, Boolean(canEdit))
+        : isMapTab
+          ? `<section id="map-tab-panel">
+              <p class="muted">${
+                activeTab?.mapId
+                  ? `Linked map #${activeTab.mapId}.`
+                  : "No map linked to this tab yet — full inline map embedding lands in Phase 3."
+              }</p>
+              <button id="map-tab-open-btn" type="button">Open map</button>
+            </section>`
+          : `<article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>`
     }
   `;
 
   el<HTMLButtonElement>("edit-btn")?.addEventListener("click", () => renderEditorView(slug));
   if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
   if (isBoard) mountBoardView(slug, entity, Boolean(canEdit));
+  if (isBoardTab) mountBoardView(slug, entity, Boolean(canEdit), activeTabId);
+  if (isMapTab) el<HTMLButtonElement>("map-tab-open-btn").addEventListener("click", () => openMapPanel());
 
   el<HTMLButtonElement>("place-on-map-btn")?.addEventListener("click", () => {
     const kind = el<HTMLSelectElement>("place-kind").value as PlacementKind;
@@ -618,9 +675,12 @@ function fileToDataUri(file: File): Promise<string> {
  *  renderEntityView's innerHTML) and wires its toolbar. Board contents are kept in a local `data`
  *  variable updated via mountBoard's onChange callback, and only written to disk on "Save" — no
  *  autosave on drag, matching the rest of this app's explicit-save convention. */
-function mountBoardView(slug: string, entity: WikiEntity, canEdit: boolean): void {
+/** `tabId` is set only for a multi-tab page's board tab — omitted, this is a whole-entity
+ *  `type: board` page (the original, still-supported shape). Only the storage functions differ
+ *  between the two; the canvas/toolbar mechanics are identical either way. */
+function mountBoardView(slug: string, entity: WikiEntity, canEdit: boolean, tabId?: string): void {
   const container = el<HTMLElement>("board-canvas-container");
-  let data: BoardData = extractBoardData(entity.body);
+  let data: BoardData = tabId ? extractBoardDataForTab(entity.body, tabId) : extractBoardData(entity.body);
 
   const handle = mountBoard(container, data, {
     editable: canEdit,
@@ -671,9 +731,10 @@ function mountBoardView(slug: string, entity: WikiEntity, canEdit: boolean): voi
     const fileHandle = handles.get(slug);
     const raw = rawContents.get(slug);
     if (!fileHandle || raw === undefined) return;
-    await saveEntity(fileHandle, replaceBoardBlockInRaw(raw, data));
+    const newRaw = tabId ? replaceBoardBlockForTabInRaw(raw, tabId, data) : replaceBoardBlockInRaw(raw, data);
+    await saveEntity(fileHandle, newRaw);
     await reloadFromDirectory();
-    renderEntityView(slug);
+    renderEntityView(slug, tabId);
   });
 }
 
@@ -994,7 +1055,7 @@ function render(): void {
   const route = currentRoute();
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
-  if (route.view === "entity") renderEntityView(route.slug);
+  if (route.view === "entity") renderEntityView(route.slug, route.tab);
   else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
   else if (route.view === "quests") renderQuestBoardView();
   else if (route.view === "sessions") renderSessionLogView();

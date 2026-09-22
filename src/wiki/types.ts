@@ -17,6 +17,21 @@ export type MapRefsByEra = Record<string, MapRef>;
 /** Shallow field overrides applied on top of the base frontmatter for one era — see resolveEntityForEra */
 export type EraOverride = Record<string, unknown>;
 
+/** One tab of a multi-tab page (Phase 6 "unified navigation" — see MAPWEAVE.md), minus its id — the
+ *  id is the key in `PageTabs` below, not a field here. `mapId` is meaningful for `type: "map"` tabs
+ *  only — which maps.id (Postgres) this tab shows. */
+export interface PageTabMeta {
+  type: "wiki" | "map" | "board";
+  title?: string;
+  mapId?: number;
+}
+
+/** `tabs` is keyed by a stable tab id (also referenced by the router's `?tab=` param and by
+ *  wiki/tabs.ts's fenced-block storage, ```<type>:<id>) — the same "map keyed by string id, not an
+ *  array of objects" shape `map_ref` already uses (`MapRefsByEra` above), because the hand-rolled
+ *  YAML-lite parser (frontmatter.ts) can represent nested maps but not an array of objects. */
+export type PageTabs = Record<string, PageTabMeta>;
+
 export interface WikiFrontmatter {
   title: string;
   type: string;
@@ -68,6 +83,11 @@ export interface WikiFrontmatter {
    *  nests when the parent is the same `type`; anything else (different type, unknown slug) falls
    *  back to a flat top-level entry rather than erroring. See wiki/SCHEMA.md. */
   parent?: string;
+  /** Multi-tab pages (Phase 6): a page can bundle more than one wiki/map/board tab. Absent/empty
+   *  means "one implicit wiki tab" (see entities.ts's toFrontmatter) — every entity created before
+   *  this field existed keeps working with zero file changes. See wiki/tabs.ts for tab content
+   *  storage and wiki/SCHEMA.md for the full convention. */
+  tabs?: PageTabs;
   [key: string]: unknown;
 }
 

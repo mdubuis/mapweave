@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { type BoardData, extractBoardData, replaceBoardBlock, replaceBoardBlockInRaw } from "./board";
+import {
+  type BoardData,
+  extractBoardData,
+  extractBoardDataForTab,
+  replaceBoardBlock,
+  replaceBoardBlockForTab,
+  replaceBoardBlockForTabInRaw,
+  replaceBoardBlockInRaw
+} from "./board";
 
 const sample: BoardData = {
   items: [
@@ -96,5 +104,66 @@ describe("replaceBoardBlockInRaw", () => {
     const written = replaceBoardBlockInRaw(raw, sample);
     const bodyStart = written.indexOf("\n---\n") + "\n---\n".length;
     expect(extractBoardData(written.slice(bodyStart))).toEqual(sample);
+  });
+});
+
+describe("extractBoardDataForTab / replaceBoardBlockForTab", () => {
+  it("returns an empty board when the tab has no block yet", () => {
+    expect(extractBoardDataForTab("Some prose.", "tab-1")).toEqual({ items: [], connectors: [] });
+  });
+
+  it("round-trips sample data through a tab-keyed block", () => {
+    const written = replaceBoardBlockForTab("Notes.", "tab-2", sample);
+    expect(extractBoardDataForTab(written, "tab-2")).toEqual(sample);
+  });
+
+  it("keeps two different tabs' board data independent", () => {
+    let body = "A multi-tab page.";
+    body = replaceBoardBlockForTab(body, "tab-a", sample);
+    body = replaceBoardBlockForTab(body, "tab-b", { items: [], connectors: [] });
+
+    expect(extractBoardDataForTab(body, "tab-a")).toEqual(sample);
+    expect(extractBoardDataForTab(body, "tab-b")).toEqual({ items: [], connectors: [] });
+  });
+
+  it("never reads the singular ```board fence a type: board entity uses", () => {
+    const body = `\`\`\`board\n${JSON.stringify(sample)}\n\`\`\`\n`;
+    expect(extractBoardDataForTab(body, "tab-1")).toEqual({ items: [], connectors: [] });
+  });
+
+  it("writing a tab's block does not disturb an existing singular ```board fence", () => {
+    const before = `\`\`\`board\n${JSON.stringify(sample)}\n\`\`\`\n`;
+    const after = replaceBoardBlockForTab(before, "tab-1", { items: [], connectors: [] });
+    expect(extractBoardData(after)).toEqual(sample);
+    expect(extractBoardDataForTab(after, "tab-1")).toEqual({ items: [], connectors: [] });
+  });
+
+  it("falls back to an empty board on malformed JSON in a tab block", () => {
+    const body = "```board:tab-1\nnot valid json {{{\n```";
+    expect(() => extractBoardDataForTab(body, "tab-1")).not.toThrow();
+    expect(extractBoardDataForTab(body, "tab-1")).toEqual({ items: [], connectors: [] });
+  });
+});
+
+describe("replaceBoardBlockForTabInRaw", () => {
+  it("preserves the frontmatter block untouched and only rewrites the tab's block in the body", () => {
+    const raw = "---\ntitle: A City Page\n---\nSome prose.";
+    const result = replaceBoardBlockForTabInRaw(raw, "tab-1", sample);
+    expect(result).toBe(
+      `---\ntitle: A City Page\n---\nSome prose.\n\n\`\`\`board:tab-1\n${JSON.stringify(sample)}\n\`\`\`\n`
+    );
+  });
+
+  it("round-trips through extractBoardDataForTab, unaffected by the frontmatter block", () => {
+    const raw = "---\ntitle: A City Page\ntabs:\n  overview:\n    type: wiki\n---\nNotes.";
+    const written = replaceBoardBlockForTabInRaw(raw, "board-tab", sample);
+    const bodyStart = written.indexOf("---\nNotes.") + "---\n".length;
+    expect(extractBoardDataForTab(written.slice(bodyStart), "board-tab")).toEqual(sample);
+  });
+
+  it("falls back to treating the whole text as body when there is no frontmatter", () => {
+    const raw = "Just prose, no frontmatter.";
+    const result = replaceBoardBlockForTabInRaw(raw, "tab-1", sample);
+    expect(result).toBe(`Just prose, no frontmatter.\n\n\`\`\`board:tab-1\n${JSON.stringify(sample)}\n\`\`\`\n`);
   });
 });
