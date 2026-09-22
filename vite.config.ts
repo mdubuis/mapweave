@@ -24,10 +24,11 @@ export default ({ mode }: { mode: string }) => ({
     emptyOutDir: true, // outDir sits outside root, so Vite would otherwise keep every past build's chunks
     rollupOptions: {
       input: {
-        // index.html is the wiki (the app's landing page); map.html is the map, opened from the
-        // wiki's "View Map" panel or directly — see MAPWEAVE.md's "wiki as root" decision
-        wiki: fileURLToPath(new URL("./src/index.html", import.meta.url)),
-        map: fileURLToPath(new URL("./src/map.html", import.meta.url))
+        // index.html is the sole entry — the whole app (wiki + map + board), one shell, one
+        // document. map.html is no longer a standalone page: its markup ships bundled instead
+        // (see src/services/map-engine-host.ts's `?raw` import) and is hosted inside a Shadow DOM
+        // element within this same page. See MAPWEAVE.md's Phase 6 "Phase 3" single-DOM-merge entry.
+        wiki: fileURLToPath(new URL("./src/index.html", import.meta.url))
       }
     }
   },

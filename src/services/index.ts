@@ -6,7 +6,6 @@ import "./fonts";
 import "./placement-bridge";
 import "./url-params";
 import "./versioning";
-import "./wiki-panel";
 
 export const Services = createRegistry({
   ExportJson: () => import("@/services/io/export-json").then(m => m.ExportJson),

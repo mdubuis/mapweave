@@ -1,11 +1,15 @@
 /**
- * Timeline UI for the map app: a small floating dropdown letting the user jump between eras, each
- * a full `.map` snapshot under public/maps/ (see wiki/SCHEMA.md). Reuses FMG's existing `?maplink=`
- * URL param to actually load the file — no new load path, just navigation. Renders nothing when
- * the wiki defines no "type: era" entities, so untouched projects see no change at all.
+ * Timeline UI for the map engine: a small floating dropdown letting the user jump between eras,
+ * each a full `.map` snapshot under public/maps/ (see wiki/SCHEMA.md). Reuses FMG's existing
+ * `?maplink=` URL param to actually load the file — no new load path, just navigation. Renders
+ * nothing when the wiki defines no "type: era" entities, so untouched projects see no change at
+ * all. Explicitly invoked once by map-engine-host.ts right after the engine itself boots — not
+ * self-bootstrapping from DOMContentLoaded anymore, since the map engine is no longer its own
+ * document with its own load event (see MAPWEAVE.md's Phase 6 "Phase 3").
  */
 
 import { showDataTip } from "@/components/tooltips";
+import { getPrimaryMountRoot } from "@/services/shadow-dom-bridge";
 import { debounce } from "@/utils";
 import { loadEntities } from "@/wiki/entities";
 import { type Era, loadEras } from "@/wiki/eras";
@@ -18,7 +22,9 @@ function selectedMaplink(): string | null {
   return new URL(location.href).searchParams.get("maplink");
 }
 
-function injectStyles(): void {
+// Global <head> styles don't reach into a shadow root at all (Shadow DOM CSS encapsulation), so
+// this has to go wherever #eraSwitcher itself ends up — getPrimaryMountRoot(), same as the element.
+function injectStyles(mountRoot: ParentNode): void {
   const style = document.createElement("style");
   style.textContent = /* css */ `
     #eraSwitcher {
@@ -44,14 +50,15 @@ function injectStyles(): void {
       font: inherit;
     }
   `;
-  document.head.appendChild(style);
+  mountRoot.appendChild(style);
 }
 
 export function initEraSwitcher(): void {
   const eras: Era[] = loadEras(loadEntities()).filter(era => era.mapFile);
   if (!eras.length) return;
 
-  injectStyles();
+  const mountRoot = getPrimaryMountRoot();
+  injectStyles(mountRoot);
 
   const current = selectedMaplink();
   const options = eras
@@ -66,7 +73,7 @@ export function initEraSwitcher(): void {
   container.innerHTML = `<select id="eraSwitcherSelect" data-tip="Load the map for a different era of this world">
     <option value=""${current ? "" : " selected"} disabled>Select an era…</option>${options}
   </select>`;
-  document.body.appendChild(container);
+  mountRoot.appendChild(container);
   container.addEventListener("mousemove", debounce(showDataTip, 50));
 
   container.querySelector("select")!.addEventListener("change", event => {
@@ -77,5 +84,3 @@ export function initEraSwitcher(): void {
     location.href = target.toString();
   });
 }
-
-document.addEventListener("DOMContentLoaded", initEraSwitcher);

@@ -39,7 +39,7 @@ export function unregisterShadowRoot(root: ShadowRoot): void {
  *  `document.body` directly (the monkeypatch above only fixes *lookups*; a direct `document.body`
  *  write — e.g. leaflet-map.ts's `ensureContainer()` — needs to call this instead). Returns the
  *  most recently registered shadow root, or `document.body` if none is registered (so this stays a
- *  no-op outside the shadow-hosted context — e.g. map.html opened standalone, with no shell). Only
+ *  no-op before the map engine has booted, or in a test environment with no shadow root at all). Only
  *  one shadow root is ever registered in practice today (the map engine's); if that changes, this
  *  single-"primary" assumption needs revisiting. */
 export function getPrimaryMountRoot(): ParentNode {

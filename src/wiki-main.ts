@@ -49,11 +49,13 @@ import { parseFrontmatter } from "@/wiki/frontmatter";
 import { patchFrontmatterType } from "@/wiki/frontmatter-patch";
 import { buildGraph } from "@/wiki/graph";
 import {
+  mapToWikiBus,
   PLACEMENT_CANCEL,
   PLACEMENT_REQUEST,
   PLACEMENT_RESULT,
   type PlacementKind,
-  type PlacementMessage
+  type PlacementMessage,
+  wikiToMapBus
 } from "@/wiki/map-bridge";
 import { insertMapRefBlock } from "@/wiki/map-ref-patch";
 import { renderMarkdown } from "@/wiki/markdown";
@@ -82,11 +84,9 @@ let autoLinkNames: AutoLinkName[] = buildAutoLinkNames(entities);
 let handles = new Map<string, FileSystemFileHandle>();
 let rawContents = new Map<string, string>();
 let dirHandle: FileSystemDirectoryHandle | undefined;
-let mapFrameLoaded = false;
-/** connectedMap.id the iframe was last loaded with (undefined = loaded with no DB map) — lets
- *  openMapPanel notice the connected map changed and reload, see mapFrameSrc. */
-let mapFrameKey: number | undefined;
-/** The DB-connected map's identity for the map panel — see loadDatabaseEntities/openMapPanel. */
+/** The DB-connected map's identity — see loadDatabaseEntities. Not yet wired into the map engine's
+ *  own load (see renderMapView's doc comment on that deferred gap); still used by the world
+ *  switcher UI. */
 let connectedMap: ConnectedMapInfo | undefined;
 /** Cached result of the last fetchAvailableMaps() call — the world switcher and the "choose a
  *  world" view both need the full list; refetched whenever either is opened, not on every render. */
@@ -169,7 +169,8 @@ type Route =
   | { view: "quests" }
   | { view: "sessions" }
   | { view: "timeline" }
-  | { view: "choose-world" };
+  | { view: "choose-world" }
+  | { view: "map" };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
@@ -178,6 +179,7 @@ function currentRoute(): Route {
     const tab = query ? (new URLSearchParams(query).get("tab") ?? undefined) : undefined;
     return { view: "entity", slug: decodeURIComponent(slugPart), tab };
   }
+  if (hash.startsWith("map")) return { view: "map" };
   if (hash.startsWith("quests")) return { view: "quests" };
   if (hash.startsWith("sessions")) return { view: "sessions" };
   if (hash.startsWith("timeline")) return { view: "timeline" };
@@ -473,11 +475,16 @@ function mountEncounterRoller(container: HTMLElement, table: string[]): void {
   draw();
 }
 
-/** FMG's `?burg=<id>` / `?cell=<id>` URL params already focus the map — see docs/wiki/URL-parameters.md */
+/** FMG's `?burg=<id>` / `?cell=<id>` URL params already focus the map — see docs/wiki/URL-parameters.md.
+ *  A real query string (read by url-params.ts's checkLoadParameters/focusOn) plus the `#/map` hash
+ *  the shell's own router recognizes — one URL, both mechanisms, each reading the part it already
+ *  reads. Changing the query string always reloads the page (unlike a hash-only navigation), so
+ *  this is a real page reload, not instant — an accepted interim trade-off (see MAPWEAVE.md's
+ *  Phase 6 "Phase 3" entry) until burg/cell focus can be requested without one. */
 function mapViewHref(mapRef: MapRef | undefined): string | undefined {
   if (!mapRef) return undefined;
-  if (mapRef.kind === "burg") return `./map.html?burg=${mapRef.id}&scale=8`;
-  if (mapRef.cell !== undefined) return `./map.html?cell=${mapRef.cell}&scale=8`;
+  if (mapRef.kind === "burg") return `?burg=${mapRef.id}&scale=8#/map`;
+  if (mapRef.cell !== undefined) return `?cell=${mapRef.cell}&scale=8#/map`;
   return undefined;
 }
 
@@ -607,7 +614,7 @@ function renderEntityView(slug: string, tabParam?: string): void {
       ${frontmatter.summary ? `<p class="summary">${frontmatter.summary}</p>` : ""}
       ${frontmatter.hook ? `<p class="hook">${frontmatter.hook}</p>` : ""}
       <div class="entity-actions">
-        ${mapHref ? `<a href="${mapHref}" target="_blank" rel="noopener">View on map ↗</a>` : ""}
+        ${mapHref ? `<a href="${mapHref}">View on map</a>` : ""}
         ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
         ${dbRef ? `<a href="#/new?title=${encodeURIComponent(frontmatter.title)}">Write a lore page for this ↗</a>` : ""}
       </div>
@@ -639,7 +646,7 @@ function renderEntityView(slug: string, tabParam?: string): void {
   if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
   if (isBoard) mountBoardView(slug, entity, Boolean(canEdit));
   if (isBoardTab) mountBoardView(slug, entity, Boolean(canEdit), activeTabId);
-  if (isMapTab) el<HTMLButtonElement>("map-tab-open-btn").addEventListener("click", () => openMapPanel());
+  if (isMapTab) el<HTMLButtonElement>("map-tab-open-btn").addEventListener("click", () => void renderMapView());
 
   el<HTMLButtonElement>("place-on-map-btn")?.addEventListener("click", () => {
     const kind = el<HTMLSelectElement>("place-kind").value as PlacementKind;
@@ -1055,6 +1062,15 @@ function render(): void {
   const route = currentRoute();
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
+
+  // The map view is a full-screen overlay (#map-panel), not a #content swap — shown only for its
+  // own route, hidden for every other one (mirrors teardownBoard()'s "always clean up first").
+  if (route.view === "map") {
+    void renderMapView();
+    return;
+  }
+  el<HTMLElement>("map-panel").setAttribute("hidden", "");
+
   if (route.view === "entity") renderEntityView(route.slug, route.tab);
   else if (route.view === "new") renderNewEntityView(route.title, route.mapRef);
   else if (route.view === "quests") renderQuestBoardView();
@@ -1155,43 +1171,32 @@ function renderGraph(): void {
     .attr("dy", 4);
 }
 
-function sendToMapFrame(message: PlacementMessage): void {
-  el<HTMLIFrameElement>("map-panel-frame").contentWindow?.postMessage(message, location.origin);
+function sendToMapEngine(message: PlacementMessage): void {
+  wikiToMapBus.dispatchEvent(new CustomEvent(message.type, { detail: message }));
 }
 
-/** `?seed=&width=&height=` for the currently connected map, so map.html regenerates the same map
- *  instead of whatever it would otherwise default to (last locally-saved map, or a fresh random
- *  one). Approximate, not exact: only reproduces the connected map if it was never hand-edited
- *  after generation — see fetchConnectedMapInfo's doc comment. No connected map: plain "./map.html",
- *  same as before this existed. */
-function mapFrameSrc(): string {
-  if (!connectedMap) return "./map.html";
-  const params = new URLSearchParams({ seed: connectedMap.seed });
-  if (connectedMap.width) params.set("width", String(connectedMap.width));
-  if (connectedMap.height) params.set("height", String(connectedMap.height));
-  return `./map.html?${params.toString()}`;
-}
-
-/** Opens the map panel, loading map.html into the iframe on first use, or reloading it if the
- *  connected map has changed since it was last loaded. `onReady` runs once the frame is actually
- *  able to receive postMessage calls — immediately if it's already loaded and current. */
-function openMapPanel(onReady?: () => void): void {
-  const mapFrame = el<HTMLIFrameElement>("map-panel-frame");
-  const key = connectedMap?.id;
-  if (!mapFrameLoaded || key !== mapFrameKey) {
-    mapFrameLoaded = true;
-    mapFrameKey = key;
-    if (onReady) mapFrame.addEventListener("load", onReady, { once: true });
-    mapFrame.src = mapFrameSrc();
-  } else if (onReady) {
-    onReady();
-  }
+/** Shows the full-screen map view and ensures the engine is booted and mounted (see
+ *  services/map-engine-host.ts — boots once, reused afterward). Shared by the `#/map` route
+ *  (render()) and the "place on map" flow (requestPlacement), which opens the map view directly
+ *  without necessarily changing the route, matching its pre-merge behavior.
+ *
+ * Known gap, deferred on purpose (see MAPWEAVE.md's Phase 6 "Phase 3" entry): doesn't yet pass a
+ * DB-connected world's seed/width/height into the engine, so a connected world doesn't auto-load
+ * here the way the old iframe's `mapFrameSrc()` made it do — it falls back to whatever the engine
+ * itself defaults to (last locally-saved map, or waiting for the user to generate one). */
+async function renderMapView(): Promise<void> {
   el<HTMLElement>("map-panel").removeAttribute("hidden");
+  // Dynamic, not static, import: map-engine-host.ts bundles map.html's raw markup (see its `?raw`
+  // import) — a static import here would pull that into the wiki's own eager entry chunk, shipping
+  // it to every visitor whether or not they ever open the map. Confirmed by actually building both
+  // ways: the wiki chunk was ~40KB with a dynamic import, 838KB with a static one.
+  const { mountMapEngine } = await import("@/services/map-engine-host");
+  await mountMapEngine(el<HTMLElement>("map-panel-mount"));
 }
 
 function cancelPendingPlacement(): void {
   if (!pendingPlacement) return;
-  sendToMapFrame({ type: PLACEMENT_CANCEL, requestId: pendingPlacement.requestId });
+  sendToMapEngine({ type: PLACEMENT_CANCEL, requestId: pendingPlacement.requestId });
   pendingPlacement = undefined;
 }
 
@@ -1202,25 +1207,23 @@ async function requestPlacement(slug: string, kind: PlacementKind): Promise<void
   const requestId = crypto.randomUUID();
   pendingPlacement = { requestId, slug, era: activeEra ?? DEFAULT_ERA, kind };
   renderEntityView(slug);
-  openMapPanel(() => sendToMapFrame({ type: PLACEMENT_REQUEST, requestId, kind }));
+  await renderMapView();
+  sendToMapEngine({ type: PLACEMENT_REQUEST, requestId, kind });
 }
 
 /** The map reports either a completed placement (write map_ref, close the panel) or a cancel
  *  (Escape / toggled off on the map side — leave the panel open so the user can just try again). */
-async function handlePlacementMessage(event: MessageEvent): Promise<void> {
-  if (event.origin !== location.origin) return;
-  if (event.source !== el<HTMLIFrameElement>("map-panel-frame").contentWindow) return;
-  const data = event.data as PlacementMessage;
-  if (!pendingPlacement || data?.requestId !== pendingPlacement.requestId) return;
+async function handlePlacementMessage(message: PlacementMessage): Promise<void> {
+  if (!pendingPlacement || message.requestId !== pendingPlacement.requestId) return;
 
   const { slug, era } = pendingPlacement;
   pendingPlacement = undefined;
 
-  if (data.type === PLACEMENT_RESULT) {
+  if (message.type === PLACEMENT_RESULT) {
     const handle = handles.get(slug);
     const raw = rawContents.get(slug);
     if (handle && raw !== undefined) {
-      const mapRef: MapRef = { kind: data.kind, id: data.id, name: data.name, cell: data.cell };
+      const mapRef: MapRef = { kind: message.kind, id: message.id, name: message.name, cell: message.cell };
       await saveEntity(handle, insertMapRefBlock(raw, era, mapRef));
       await reloadFromDirectory();
     }
@@ -1298,14 +1301,21 @@ function initToolbar(): void {
     if (event.target === el<HTMLElement>("graph-panel")) el<HTMLElement>("graph-panel").setAttribute("hidden", "");
   });
 
-  el<HTMLButtonElement>("toggle-map-btn").addEventListener("click", () => openMapPanel());
+  el<HTMLButtonElement>("toggle-map-btn").addEventListener("click", () => {
+    location.hash = "map";
+  });
   el<HTMLButtonElement>("map-panel-close").addEventListener("click", () => {
-    el<HTMLElement>("map-panel").setAttribute("hidden", "");
     if (pendingPlacement) {
       const slug = pendingPlacement.slug;
       cancelPendingPlacement();
+      el<HTMLElement>("map-panel").setAttribute("hidden", "");
       renderEntityView(slug);
+      return;
     }
+    // On the #/map route: navigate back, which hides the panel via render()'s own route-based
+    // show/hide. Opened directly by the placement flow instead (hash untouched): just hide it.
+    if (currentRoute().view === "map") location.hash = "";
+    else el<HTMLElement>("map-panel").setAttribute("hidden", "");
   });
 }
 
@@ -1313,7 +1323,12 @@ window.addEventListener("hashchange", () => {
   cancelPendingPlacement();
   render();
 });
-window.addEventListener("message", event => void handlePlacementMessage(event));
+mapToWikiBus.addEventListener(PLACEMENT_RESULT, event => {
+  void handlePlacementMessage((event as CustomEvent<PlacementMessage>).detail);
+});
+mapToWikiBus.addEventListener(PLACEMENT_CANCEL, event => {
+  void handlePlacementMessage((event as CustomEvent<PlacementMessage>).detail);
+});
 initToolbar();
 render();
 void connectToPersistedWorld();
