@@ -31,8 +31,16 @@ export async function boot(): Promise<void> {
 
   Options.restore();
   syncOptionInputs();
-  restoreUi();
+  // Before restoreUi(): its applyZoomExtent() call divides by viewport.width/height to find the
+  // zoom floor — real bug found by actually generating a map, not by reading the code: with this
+  // order, that first computation always divided by the viewport module's unset 0/0 default,
+  // setting minZoom to exactly 0. Nothing recomputed it before a "New Map" click on a map that had
+  // never been generated before (idle-state's own path, unlike the old always-auto-generate one,
+  // which happened to always fix it via fitMapToScreen() before anyone could hit "New Map") —
+  // Leaflet's unproject() with a zero zoom then divides by zero internally, throwing "Invalid LatLng
+  // object: (NaN, NaN)" and leaving the map blank.
   setViewportSize(options.map.graph.width, options.map.graph.height);
+  restoreUi();
   applyDefaultViewboxEvents();
 
   if (!warnIfServerless()) {

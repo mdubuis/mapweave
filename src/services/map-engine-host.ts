@@ -13,6 +13,7 @@
  * mirroring how the old iframe-based map panel kept its document alive across show/hide.
  */
 
+import { getLeafletMap, isLeafletMapReady } from "@/components/leaflet-map";
 import mapHtmlRaw from "@/map.html?raw";
 import { getPrimaryMountRoot, installShadowDomBridge, registerShadowRoot } from "@/services/shadow-dom-bridge";
 
@@ -56,6 +57,27 @@ function loadScript(src: string): Promise<void> {
 
 async function loadSequentially(paths: string[]): Promise<void> {
   for (const path of paths) await loadScript(path);
+}
+
+/** A `<link rel="stylesheet">` loads asynchronously and nothing here previously waited for it — real
+ *  bug found by actually loading the page: `index.css` supplies `#leaflet-root { position: fixed;
+ *  inset: 0 }`, the only thing giving Leaflet's map container real dimensions to measure before
+ *  Leaflet's own constructor overwrites its inline style to `position: relative` and caches whatever
+ *  size it measured. If `getLeafletMap()` (called early, via zoom.ts/viewbox-events.ts, during
+ *  boot()) runs before this stylesheet has actually applied, Leaflet permanently caches a zero-height
+ *  container — the stylesheet finishing moments later doesn't help, since Leaflet's own inline style
+ *  already overrode it and nothing calls `invalidateSize()` afterward. Confirmed via a real browser:
+ *  "Invalid LatLng object: (NaN, NaN)" thrown from Leaflet's `unproject`, every time a freshly
+ *  generated map tried to fit/reset its view. */
+function loadStylesheet(shadow: ShadowRoot, href: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = `${BASE}${href}`;
+    link.onload = () => resolve();
+    link.onerror = () => reject(new Error(`Failed to load ${href}`));
+    shadow.appendChild(link);
+  });
 }
 
 /** Parses the real map.html once — used for both the `<head>`'s inline `<style>` and the `<body>`
@@ -120,8 +142,8 @@ let bootPromise: Promise<HTMLElement> | undefined;
 
 /** The actual one-time boot sequence — creates the shadow host, injects the real body/stylesheets,
  *  loads the classic scripts in order, redirects jQuery UI's dialog appendTo, replicates main.ts's
- *  side-effect imports, and calls the real boot(). Returns the host element (not yet attached to
- *  any container — the caller places it). */
+ *  side-effect imports, and calls the real boot(). Returns the host element, already attached (to a
+ *  hidden temporary spot — see below) rather than left detached for the caller to place. */
 async function bootEngine(): Promise<HTMLElement> {
   installShadowDomBridge();
 
@@ -130,12 +152,21 @@ async function bootEngine(): Promise<HTMLElement> {
   const shadow = host.attachShadow({ mode: "open" });
   registerShadowRoot(shadow);
 
-  for (const href of STYLESHEETS) {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = `${BASE}${href}`;
-    shadow.appendChild(link);
-  }
+  // Attached immediately, off-screen, rather than left detached until mountMapEngine's caller places
+  // it: a `<link>` appended to a shadow root inside a still-detached host never fires `load` at all
+  // in a real browser (confirmed — the stylesheet await below hung forever until this was added), so
+  // there is no way to wait for real CSS without being connected to the document first.
+  // `visibility: hidden`, not `display: none` — a `display: none` subtree has no layout box at all
+  // (every measurement, including what Leaflet's map constructor reads off its container, comes back
+  // zero), while `visibility: hidden` still computes real layout, just without painting it — no
+  // visible flash over the wiki page during boot, but real box sizes are measured. Positioned off the
+  // visible page as a second safety net in case anything ever un-hides it early.
+  // container.appendChild(host) later (in mountMapEngine) reparents this into the real spot, and
+  // calls map.invalidateSize() there for anything Leaflet measured differently in this temporary spot.
+  host.style.cssText = "visibility: hidden; position: fixed; top: 0; left: -99999px;";
+  document.body.appendChild(host);
+
+  await Promise.all(STYLESHEETS.map(href => loadStylesheet(shadow, href)));
 
   const parsed = parseLegacyDocument();
   for (const style of legacyHeadStyles(parsed)) shadow.appendChild(style);
@@ -192,7 +223,15 @@ async function bootEngine(): Promise<HTMLElement> {
 export async function mountMapEngine(container: HTMLElement): Promise<void> {
   bootPromise ??= bootEngine();
   const host = await bootPromise;
-  if (host.parentElement !== container) container.appendChild(host);
+  if (host.parentElement !== container) {
+    container.appendChild(host);
+    host.style.cssText = ""; // clears bootEngine's temporary off-screen/hidden positioning
+    // Leaflet's own container was measured (and its inline `position: relative` set) while `host`
+    // sat in its temporary spot — same viewport-relative size as the real one today (both fill the
+    // viewport), but invalidateSize() is the correct, idiomatic Leaflet call whenever a map's
+    // container may have moved/resized, and costs nothing if the size turns out unchanged.
+    if (isLeafletMapReady()) getLeafletMap().invalidateSize();
+  }
 }
 
 export function isMapEngineBooted(): boolean {
