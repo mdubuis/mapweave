@@ -23,8 +23,14 @@ npm run dev
 ```
 
 Ouvre l'URL que Vite affiche (ex: `http://localhost:5173/Fantasy-Map-Generator/`). Tu arrives sur le
-**wiki**, connecté automatiquement à la dernière carte créée. "View Map" dans la barre latérale ouvre
-la carte ; le bouton en haut à droite de la carte revient au wiki.
+**wiki** — c'est le seul point d'entrée maintenant, la carte n'est plus un document séparé (`map.html`)
+mais une vue à l'intérieur de la même app (Phase 6, voir `MAPWEAVE.md`). Première visite, aucun monde
+choisi avant : tu atterris sur "Choose a world" — soit un monde déjà généré dans la base, soit
+"+ Create a new world…", qui ouvre la carte directement sur l'onglet Options (réglages de génération :
+seed, template, cultures, états…) plutôt que sur un état "no map yet". Une fois un monde choisi, l'app
+s'y reconnecte automatiquement aux visites suivantes (persisté en local, pas "la dernière carte créée"
+globalement). "View Map" dans la barre latérale ouvre la carte ; le bouton ✕ en haut à droite de la
+carte revient au wiki.
 
 Si le terminal 1 ou 2 n'est pas lancé, le wiki fonctionne quand même (juste sans les entités de la
 base de données — les pages écrites à la main restent accessibles).
@@ -57,7 +63,8 @@ si besoin d'une couverture bout-en-bout.
 | Le format des fiches wiki | `wiki/SCHEMA.md` + `src/wiki/entities.ts`, `frontmatter.ts` |
 | Le rendu Markdown | `src/wiki/markdown.ts` |
 | L'UI du wiki (navigation, édition) | `src/wiki-main.ts`, `src/index.html`, `src/wiki.css` |
-| Le lien carte ↔ wiki | `src/wiki/map-link.ts` + `burg-editor.ts`, `markers-editor.ts`, `states-editor.ts` |
+| Le lien carte ↔ wiki (icône "wiki page" sur un burg/marker/état) | `src/wiki/map-link.ts` + `burg-editor.ts`, `markers-editor.ts`, `states-editor.ts` |
+| La carte fusionnée dans le shell (moteur legacy en Shadow DOM), "Place on map", l'écran "Choose a world" | `src/services/map-engine-host.ts`, `src/services/shadow-dom-bridge.ts`, `src/wiki/map-bridge.ts`, `src/wiki-main.ts` (routes `#/map`, `#/choose-world`) — voir `MAPWEAVE.md`, section "Phase 6" |
 | Les ères / la timeline | `src/wiki/eras.ts`, `src/services/era-switcher.ts` |
 | Le contenu d'exemple | `wiki/**/*.md` |
 | Le style partagé (dialogues, boutons) | `public/index.css` |
