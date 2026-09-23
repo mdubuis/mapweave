@@ -45,10 +45,54 @@ export function dbRefOf(entity: WikiEntity): DbEntityRef | undefined {
   return entity.frontmatter.dbRef as DbEntityRef | undefined;
 }
 
+/** The one place this URL is written — everything that talks to the Postgres API server (the wiki
+ *  shell and, via the exports below, the merged map engine's burg editor) imports it from here
+ *  instead of hardcoding its own copy. */
+export const API_BASE = "http://127.0.0.1:3001";
+
 export async function fetchAvailableMaps(apiBase: string): Promise<MapSummary[]> {
   const response = await fetch(`${apiBase}/api/maps`);
   if (!response.ok) throw new Error(`GET /api/maps failed: ${response.status}`);
   return response.json();
+}
+
+/** Which Postgres map (if any) the shell is currently connected to — set by wiki-main.ts's
+ *  loadDatabaseEntities, read by the merged map engine's burg editor to decide whether "Generate
+ *  detail map" makes sense at all (it's a Postgres-backed feature — see requestDetailMap below —
+ *  meaningless for a map with no database connection). Plain module state, not a global: this
+ *  module is shared by both sides of the single-DOM merge (Phase 6 "Phase 3"), so an ordinary
+ *  import gets the same live value either way. */
+let connectedMapId: number | undefined;
+export function setConnectedMapId(mapId: number | undefined): void {
+  connectedMapId = mapId;
+}
+export function getConnectedMapId(): number | undefined {
+  return connectedMapId;
+}
+
+export interface DetailMapResult {
+  mapId: number;
+  name: string;
+}
+
+/** Burg-scoped detail map generation (Phase 6 "Phase 4") — see
+ *  server/src/generation/detail-map.ts and the POST /api/maps/:id/burgs/:burgId/generate-detail
+ *  route for what this actually does. Simplification, not yet handled: calling this twice for the
+ *  same burg creates two independent detail maps, the second silently replacing the first's
+ *  child_map_id link rather than being blocked — acceptable for now (no data corruption, just an
+ *  orphaned first map), not yet worth the extra round-trip to check for an existing link first. */
+export async function requestDetailMap(apiBase: string, parentMapId: number, burgId: number): Promise<DetailMapResult> {
+  const response = await fetch(`${apiBase}/api/maps/${parentMapId}/burgs/${burgId}/generate-detail`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}) as { error?: string });
+    throw new Error(body.error ?? `POST generate-detail failed: ${response.status}`);
+  }
+  const row = await response.json();
+  return { mapId: row.mapId, name: row.name };
 }
 
 export interface ConnectedMapInfo {

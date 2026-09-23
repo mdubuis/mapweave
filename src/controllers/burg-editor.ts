@@ -9,6 +9,7 @@ import { removeEmblem } from "@/renderers/draw-emblems";
 import { EmblemRenderer } from "@/renderers/emblems/renderer";
 import { getHeight, openURL, speak } from "@/utils";
 import { MAX_ZOOM, PAN_ZOOM_IDENTITY, type PanZoom, panBy, zoomAt } from "@/utils/panZoomUtils";
+import { API_BASE, getConnectedMapId, requestDetailMap } from "@/wiki/db-entities";
 import { activeEra, wikiLinkHref, wikiLinkTip } from "@/wiki/map-link";
 import type { Burg } from "../generators/burgs-generator";
 import { convertTemperature, ensureEl, getPointer, getTemperatureLikeness, rand, rn } from "../utils";
@@ -238,6 +239,15 @@ function renderDialog(): void {
           data-tip="${wikiLinkTip(activeEra(), { kind: "burg", id: getSelectedId() })}"
           class="icon-link-ext pointer"
         ></a>
+        ${
+          getConnectedMapId() !== undefined
+            ? `<button
+                id="burgGenerateDetailMap"
+                data-tip="Generate a detail map of this burg's surroundings, inheriting terrain and culture/state from this map"
+                class="icon-search-plus"
+              ></button>`
+            : ""
+        }
         <button id="burgLock" class="icon-lock-open" onmouseover="showElementLockTip(event)"></button>
         <button
           id="burgRemove"
@@ -285,10 +295,30 @@ function renderDialog(): void {
   ensureEl("burgRemove").addEventListener("click", removeSelectedBurg);
   ensureEl("burgTemperatureGraph").addEventListener("click", showTemperatureGraph);
   ensureEl("burgProductionOverview").addEventListener("click", showProductionOverview);
+  if (getConnectedMapId() !== undefined) ensureEl("burgGenerateDetailMap").addEventListener("click", generateDetailMap);
 }
 
 function getSelectedId(): number {
   return selectedId ?? +selected!.attr("data-id");
+}
+
+/** Phase 6 "Phase 4" — see server/src/generation/detail-map.ts and MAPWEAVE.md. Only wired up when
+ *  the shell is connected to a Postgres map (button is omitted entirely otherwise). */
+async function generateDetailMap(): Promise<void> {
+  const parentMapId = getConnectedMapId();
+  if (parentMapId === undefined) return;
+
+  const burg = pack.burgs[getSelectedId()];
+  const button = ensureEl<HTMLButtonElement>("burgGenerateDetailMap");
+  button.disabled = true;
+  try {
+    const result = await requestDetailMap(API_BASE, parentMapId, burg.i);
+    tip(`Detail map created: ${result.name}`, true, "success", 8000);
+  } catch (error) {
+    tip(`Could not generate detail map: ${(error as Error).message}`, false, "error", 8000);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function updateGroupsList(): void {

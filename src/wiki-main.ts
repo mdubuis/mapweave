@@ -16,12 +16,14 @@ import {
   replaceBoardBlockInRaw
 } from "@/wiki/board";
 import {
+  API_BASE,
   type ConnectedMapInfo,
   dbRefOf,
   fetchAvailableMaps,
   fetchConnectedMapInfo,
   loadGeneratedEntities,
-  type MapSummary
+  type MapSummary,
+  setConnectedMapId
 } from "@/wiki/db-entities";
 import {
   createEntity,
@@ -106,8 +108,6 @@ function teardownBoard(): void {
   activeBoardHandle?.destroy();
   activeBoardHandle = undefined;
 }
-
-const API_BASE = "http://127.0.0.1:3001";
 
 function mergeEntitySources(): void {
   entities = [...fileEntities, ...dbEntities];
@@ -223,6 +223,7 @@ async function loadDatabaseEntities(mapId: number): Promise<void> {
   ]);
   dbEntities = entities;
   connectedMap = mapInfo;
+  setConnectedMapId(mapInfo.id);
   mergeEntitySources();
   localStorage.setItem(WORLD_STORAGE_KEY, String(mapId));
   updateWorldSwitcherLabel();
