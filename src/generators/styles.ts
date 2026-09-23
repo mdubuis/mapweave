@@ -1,4 +1,5 @@
 import { type LayerId, Layers } from "@/components/layers";
+import { getPrimaryMountRoot } from "@/services/shadow-dom-bridge";
 import { parseSections, type TemplateLookup } from "@/utils/schemaUtils";
 import defaultStyles from "./default-styles.json";
 import { type StyleLayerId, type Styles as StylesData, stylesSchema } from "./styles-schema";
@@ -26,7 +27,16 @@ function set(data: StylesData): void {
 // attrs go onto the DOM by data-layer/data-group; options never do (renderers read the store)
 function write(...ids: StyleLayerId[]): void {
   for (const id of ids) {
-    const root = document.querySelector(`[data-layer="${id}"]`);
+    // getPrimaryMountRoot(), not document: real bug found by actually generating a map, not by
+    // reading the code — [data-layer="..."] is an attribute selector, and the shadow-DOM bridge's
+    // document.querySelector fallback only covers bare #id selectors (see its own doc comment: a
+    // general/compound selector can't unambiguously combine light+shadow results). Every one of
+    // these lookups silently found nothing once the map moved into a shadow root (Phase 1), so no
+    // style attribute — landmass's fill included — was ever written to the DOM again.
+    // getPrimaryMountRoot() resolves to the registered shadow root when the map is shadow-hosted, or
+    // document.body otherwise (same fallback leaflet-map.ts's ensureContainer() already relies on),
+    // so this searches the right single tree instead of trying to search both.
+    const root = getPrimaryMountRoot().querySelector(`[data-layer="${id}"]`);
     if (!root) continue;
     writeNode(root, styles[id]);
   }

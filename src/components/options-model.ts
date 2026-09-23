@@ -27,7 +27,12 @@ declare global {
 }
 
 export const STORAGE_KEY = "fmg-options";
-export const DEFAULT_THEME_COLOR = "#997787";
+/** Matches the wiki shell's own `--bg` (src/wiki.css) — changeDialogsTheme() derives the whole
+ *  dialog palette from this one color's hue/saturation/lightness, so starting from the wiki's own
+ *  dark blue-gray instead of FMG's original light mauve (#997787) makes the map's dialogs read as
+ *  the same app as the wiki by default, not a reskin bolted on top. Still a real hue/sat/lightness
+ *  a user can repick via the theme color picker — this only changes what a fresh install starts at. */
+export const DEFAULT_THEME_COLOR = "#16181d";
 const SAVE_DELAY = 500;
 
 const locale = () => (typeof navigator === "undefined" ? "" : navigator.language);

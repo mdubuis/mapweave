@@ -86,7 +86,15 @@ iframe {
 }
 
 #map {
-  background-color: #000000;
+  /* No background-color: #map is a plain sibling pane of Leaflet's own map pane (leaflet-map.ts's
+     mountLegacySvg), appended after it so it paints on top — by design, so its hand-drawn content
+     (rivers, labels, icons) layers over the newer Leaflet-rendered territory/biome layers underneath.
+     An opaque background here defeats that entirely: real bug found by actually generating a map —
+     #map used to be the ONLY rendering surface with everything (including ocean) drawn as its own
+     SVG shapes, when solid black made sense as a "nothing generated here" base. Now that ocean and
+     territory colors render as Leaflet vector layers behind it (MIGRATION.md's Leaflet migration),
+     that same opaque black instead hid all of it — confirmed by forcing this transparent live in a
+     browser and watching the Leaflet-rendered ocean appear underneath. */
   mask-mode: alpha;
   mask-clip: no-clip;
   fill-rule: evenodd;
@@ -391,6 +399,12 @@ text.drag {
 
 #dialogs {
   background-color: var(--bg-dialogs);
+  /* No rule anywhere in this file (or map.html) ever set a base text color — every dialog's default
+     text relied on the browser default (black), invisible now that --bg-dialogs is dark instead of
+     the near-white it was hardcoded to before. `color` inherits, so this alone fixes every dialog
+     element that doesn't have its own more specific color rule (the flipped ones elsewhere in this
+     file, and the deliberately-untouched ones with their own fixed, non-theme background). */
+  color: var(--fg, #e6e6e6);
 }
 
 .draggable {
@@ -519,7 +533,7 @@ button.options:hover {
 }
 
 #options .tip {
-  color: #444;
+  color: var(--muted, #9aa0aa);
   font-size: 0.9em;
   font-family: sans-serif;
   font-style: italic;
@@ -536,7 +550,7 @@ button.options:hover {
 }
 
 #aboutContent a {
-  color: #1d1b1c;
+  color: var(--accent, #4f8ef7);
   font-weight: bold;
   text-decoration: underline;
 }
@@ -546,7 +560,7 @@ button.options:hover {
 }
 
 #options i {
-  color: #31272c;
+  color: var(--fg, #e6e6e6);
   font-size: 0.85em;
   cursor: pointer;
 }
@@ -562,7 +576,7 @@ button.options:hover {
 }
 
 #options button i.icon-cog:hover {
-  color: #111;
+  color: var(--fg, #e6e6e6);
   background-color: var(--bg-light);
   transform: rotateZ(180deg);
 }
@@ -858,7 +872,7 @@ fieldset {
 
 .tabcontent li.buttonoff {
   background-color: var(--bg-disabled);
-  color: #444444aa;
+  color: var(--muted, #9aa0aa);
 }
 
 .tabcontent li:hover {
@@ -1120,7 +1134,7 @@ fieldset {
 #templateBody .icon-resize-vertical {
   cursor: row-resize;
   font-size: 0.9em;
-  color: #555555;
+  color: var(--muted, #9aa0aa);
   margin: 1px 1px;
 }
 
@@ -1128,7 +1142,7 @@ fieldset {
 #templateBody .icon-check {
   width: 1.1em;
   cursor: pointer;
-  color: #575957;
+  color: var(--fg, #e6e6e6);
   font-size: 0.9em;
 }
 
@@ -1489,7 +1503,7 @@ div.header {
 }
 
 .totalLine {
-  color: #666666;
+  color: var(--muted, #9aa0aa);
   font-style: italic;
   font-size: 0.9em;
   margin-bottom: 3px;
@@ -1649,18 +1663,18 @@ div.states .icon-resize-vertical {
 }
 
 div.states > [class^="icon-"] {
-  color: #6e5e66;
+  color: var(--muted, #9aa0aa);
   padding: 0;
 }
 
 div.states > .icon-arrows-cw {
-  color: #67575c;
+  color: var(--muted, #9aa0aa);
   font-size: 0.9em;
   cursor: pointer;
 }
 
 div.states > .before {
-  color: #6e5e66;
+  color: var(--muted, #9aa0aa);
   padding: 0 1px 0 0;
 }
 
@@ -1728,7 +1742,7 @@ div.states span.inactive:hover {
 #burgsFooterPopulation {
   border: 0;
   width: 50px;
-  color: #666666;
+  color: var(--fg, #e6e6e6);
   font-style: italic;
   line-height: 1.4em;
 }
@@ -1995,7 +2009,7 @@ div.editorLine {
 
 #unitsEditor i.icon-lock-open,
 #unitsEditor i.icon-lock {
-  color: #626573;
+  color: var(--muted, #9aa0aa);
   font-size: 0.8em;
   cursor: pointer;
   position: fixed;
@@ -2128,7 +2142,7 @@ input[type="checkbox"]:not(.native) {
   line-height: 0.8em;
   font-weight: bold;
   content: "✓";
-  color: #333333;
+  color: var(--success, #4ff7a0);
 }
 
 div.textual select,
@@ -2314,7 +2328,7 @@ svg.button {
 
 #worldControls i.icon-lock-open,
 #worldControls i.icon-lock {
-  color: #626573;
+  color: var(--muted, #9aa0aa);
   font-size: 0.8em;
   cursor: pointer;
 }
@@ -2507,7 +2521,7 @@ svg.button {
 
   font-style: italic;
   font-weight: bold;
-  color: #222;
+  color: var(--muted, #9aa0aa);
   margin: 0.8em 0 0 0;
 }
 .separator::before,

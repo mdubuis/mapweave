@@ -5,7 +5,7 @@ import { fitMapToScreen } from "@/components/canvas";
 import { showGenerateIdleState } from "@/components/idle-state";
 import { Layers } from "@/components/layers";
 import { applyLayersPreset, applyURLLayers } from "@/components/layers-presets";
-import { type GenerationConfig, generate } from "@/components/lifecycle";
+import { type GenerationConfig, generate, markStyleApplied } from "@/components/lifecycle";
 import { tip } from "@/components/tooltips";
 import { zoomTo } from "@/components/zoom";
 import type { Burg } from "@/generators/burgs-generator";
@@ -61,6 +61,7 @@ export async function checkLoadParameters(): Promise<void> {
 /** The start-up path: style, world, layers, then wherever the URL says to look */
 export async function generateMapOnLoad(config?: GenerationConfig): Promise<void> {
   await applyStyleOnLoad(); // the previously selected default or custom style
+  markStyleApplied(); // so a later "New Map" click (regenerateMap) doesn't redundantly redo this
   await generate(config);
   applyLayersPreset();
   Layers.drawAll();

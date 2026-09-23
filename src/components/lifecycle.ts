@@ -42,6 +42,23 @@ export async function boot(): Promise<void> {
   setViewportSize(options.map.graph.width, options.map.graph.height);
   restoreUi();
   applyDefaultViewboxEvents();
+  // Real bug, same family as the zoom-floor one above: generateMapOnLoad() (the old auto-generate
+  // path) always called this itself right after generating, so regenerateMap() ("New Map"/F2) never
+  // needed to — it only ever ran on a map that generateMapOnLoad() had already set layer visibility
+  // for. idle-state's "configure, then click New Map" flow lets regenerateMap() be the very first
+  // generation ever, with no prior applyLayersPreset() call from anywhere — every layer (biomes
+  // included) stayed at its blank initial state, so a freshly generated map showed bare black
+  // landmass silhouettes with no biome colors, borders, or any other layer. Calling it once here
+  // establishes that baseline before either code path can possibly run; generateMapOnLoad()'s own
+  // call afterward is a harmless no-op repeat, not a second source of truth.
+  // Dynamic import, not a static one: layers-presets.ts pulls in options/tabs/layers-tab.ts, whose
+  // top-level code writes into a #layersContent element that only exists once the real map.html body
+  // is in the DOM — fine at runtime (this line only runs after that's true), but a static import
+  // makes it part of lifecycle.ts's own module-load-time graph, which broke an unrelated test that
+  // imports lifecycle.ts in a DOM-less context (real regression, caught by the test suite, not
+  // theoretical). A dynamic import only resolves when this line actually executes.
+  const { applyLayersPreset } = await import("@/components/layers-presets");
+  applyLayersPreset();
 
   if (!warnIfServerless()) {
     hideLoading();
@@ -97,6 +114,15 @@ export async function generate(config?: GenerationConfig): Promise<void> {
   }
 }
 
+/** Whether a style preset has ever been applied to the SVG elements this page load — see
+ *  regenerateMap's own applyStyleOnLoad() call below for why this exists. generateMapOnLoad()
+ *  (url-params.ts) calls this after its own applyStyleOnLoad(), so a later "New Map" click doesn't
+ *  redundantly re-apply the saved preset over whatever the user has since customized. */
+let styleAppliedOnce = false;
+export function markStyleApplied(): void {
+  styleAppliedOnce = true;
+}
+
 /** Replace the current map with a new one. Debounced: the hotkey and the button both fire it */
 export const regenerateMap = debounce(async (config?: GenerationConfig | string) => {
   const reason = typeof config === "string" ? config : "user request";
@@ -111,6 +137,23 @@ export const regenerateMap = debounce(async (config?: GenerationConfig | string)
   customization = 0;
   resetZoom(1000);
   undraw();
+  // Real bug, same family as the two above: generateMapOnLoad() (the old auto-generate path)
+  // always called applyStyleOnLoad() itself before generating — the thing that actually applies
+  // the saved/default style preset's colors (including #landmass's own fill: SVG defaults an
+  // unstyled shape to solid black, and nothing else ever painted over it once biome/state coloring
+  // moved to Leaflet panes *underneath* the legacy SVG rather than later-in-the-same-SVG on top of
+  // it) — so a map generated via regenerateMap() alone rendered as a flat black silhouette with the
+  // real, colored territory data invisible right behind it. Can't just move this call into boot()
+  // like the other two fixes: applyStyleOnLoad is a classic-script global (style-presets.js) that
+  // doesn't exist yet at boot() time (it's one of the DEFERRED_SCRIPTS, loaded after boot()
+  // returns — see map-engine-host.ts) — calling it there would throw. Only run it once, though:
+  // unlike the zoom floor and layers preset (pure baseline state, safe to reset every regeneration),
+  // re-applying the *saved* style preset on every subsequent "New Map" click would silently discard
+  // whatever the user just customized in the Style tab.
+  if (!styleAppliedOnce) {
+    styleAppliedOnce = true;
+    await applyStyleOnLoad();
+  }
   await generate(typeof config === "string" ? undefined : config);
   Layers.drawAll();
 

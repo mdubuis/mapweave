@@ -917,7 +917,16 @@ function changeDialogsTheme(themeColor: string, transparency: number): void {
     ["--header", hsl(h, s, l - 0.03, alphaReduced).toString()],
     ["--header-active", hsl(h, s, l - 0.09, alphaReduced).toString()],
     ["--bg-disabled", hsl(h, s - 0.04, l + 0.09).toString()],
-    ["--bg-dialogs", hsl(0, 0, 0.98, alpha).toString()]
+    // Was hardcoded to hsl(0, 0, 0.98, alpha) — near-white regardless of the chosen theme color,
+    // which is what #dialogs's content area (the bulk of every dialog's visible surface) uses as its
+    // background. Fine for FMG's original light theme (a near-white theme color made this a no-op),
+    // but a real bug for a dark one: it left every dialog's main body near-white while everything
+    // around it (header, borders) correctly went dark, and the many hardcoded-dark text colors
+    // throughout index.css (written assuming that near-white background) went straight back to
+    // unreadable dark-on-dark once this was fixed — see the flipped colors alongside this change,
+    // all of which relied on the same wrong assumption. Derived like --bg-light instead, so it tracks
+    // the theme color like everything else here.
+    ["--bg-dialogs", hsl(h, s, l + 0.06, alpha).toString()]
   ];
   for (const [name, value] of variables) document.documentElement.style.setProperty(name, value);
 }
