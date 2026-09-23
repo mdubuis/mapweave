@@ -74,11 +74,20 @@ export default async function mapsRoutes(app) {
   app.post("/api/maps/:id/burgs/:burgId/generate-detail", async (request, reply) => {
     const parentMapId = Number(request.params.id);
     const burgId = Number(request.params.burgId);
-    const { seed, width, height, density, zoomFactor, name } = request.body ?? {};
+    const { seed, width, height, density, zoomFactor, burgsLimit, name } = request.body ?? {};
 
     let packExport;
     try {
-      ({ packExport } = await runDetailGeneration({ parentMapId, burgId, seed, width, height, density, zoomFactor }));
+      ({ packExport } = await runDetailGeneration({
+        parentMapId,
+        burgId,
+        seed,
+        width,
+        height,
+        density,
+        zoomFactor,
+        burgsLimit
+      }));
     } catch (error) {
       return reply.code(404).send({ error: error.message });
     }
