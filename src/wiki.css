@@ -135,6 +135,19 @@ body {
 .world-list-item.current {
   border-color: var(--accent);
 }
+a.world-list-item.create-world {
+  display: block;
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--transition);
+}
+a.world-list-item.create-world:hover {
+  background: var(--bg-alt);
+}
 
 #era-select {
   width: 100%;

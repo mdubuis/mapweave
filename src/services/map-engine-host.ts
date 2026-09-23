@@ -151,3 +151,21 @@ export async function mountMapEngine(container: HTMLElement): Promise<void> {
 export function isMapEngineBooted(): boolean {
   return bootPromise !== undefined;
 }
+
+/** Opens the map engine's "Options" tab — map generation settings: seed, template, point count,
+ *  culture/state/province/religion/burg counts (see components/options/tabs/options-tab.ts) —
+ *  instead of leaving the default "no map yet" idle-state prompt up. For the wiki's "create a new
+ *  world" landing choice: land the user on generation settings, not an instant random map.
+ *
+ * Dismisses the idle-state overlay if it's showing (true on a genuinely first boot with no
+ * persisted/linked map — see url-params.ts's checkLoadParameters) rather than leaving it stacked
+ * on top of the settings panel; harmless to call even when it isn't showing. Call after
+ * mountMapEngine() has resolved, so the engine (and its "optionsTab" button, inside the shadow
+ * root — found via shadow-dom-bridge.ts's document.getElementById fallback, same as the rest of
+ * the legacy code) actually exists. */
+export async function openGenerationSettings(): Promise<void> {
+  document.getElementById("generateIdleState")?.remove();
+  const { showOptions } = await import("@/components/options/options-panel");
+  showOptions();
+  document.getElementById("optionsTab")?.click();
+}

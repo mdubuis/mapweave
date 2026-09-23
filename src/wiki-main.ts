@@ -170,7 +170,7 @@ type Route =
   | { view: "sessions" }
   | { view: "timeline" }
   | { view: "choose-world" }
-  | { view: "map" };
+  | { view: "map"; newWorld?: boolean };
 
 function currentRoute(): Route {
   const hash = location.hash.replace(/^#\/?/, "");
@@ -179,7 +179,10 @@ function currentRoute(): Route {
     const tab = query ? (new URLSearchParams(query).get("tab") ?? undefined) : undefined;
     return { view: "entity", slug: decodeURIComponent(slugPart), tab };
   }
-  if (hash.startsWith("map")) return { view: "map" };
+  if (hash.startsWith("map")) {
+    const newWorld = new URLSearchParams(hash.split("?")[1] ?? "").get("new") === "1";
+    return { view: "map", newWorld };
+  }
   if (hash.startsWith("quests")) return { view: "quests" };
   if (hash.startsWith("sessions")) return { view: "sessions" };
   if (hash.startsWith("timeline")) return { view: "timeline" };
@@ -239,24 +242,33 @@ function updateWorldSwitcherLabel(): void {
 /**
  * Connects to whichever world the user picked last time (see renderChooseWorldView/openWorldMenu),
  * so returning to the app doesn't re-ask every load — but never guesses "the most recent map" the
- * way the old auto-connect did. No persisted world, or it no longer exists: sends a first-time
- * visitor (still on the plain landing route) to #/choose-world; leaves a direct deep link (e.g. a
- * bookmarked entity page) alone rather than yanking it away. Silent on any network failure — the
- * wiki must stay fully usable on file entities alone either way.
+ * way the old auto-connect did. No persisted world, or it no longer exists, or the API server
+ * can't be reached at all to check: sends a first-time visitor (still on the plain landing route)
+ * to #/choose-world — the "pick an existing world or create a new one" landing choice, never
+ * silently dropped onto the plain wiki home view, even fully offline (creating a new world is the
+ * legacy engine's own client-side generation, which needs no server at all; renderChooseWorldView
+ * itself degrades gracefully when the "existing worlds" list can't be fetched). Leaves a direct
+ * deep link (e.g. a bookmarked entity page) alone rather than yanking it away.
  */
 async function connectToPersistedWorld(): Promise<void> {
   const persistedId = Number(localStorage.getItem(WORLD_STORAGE_KEY)) || undefined;
+  const isFirstVisit = currentRoute().view === "list";
+  let matched = false;
+
   try {
     availableWorlds = await fetchAvailableMaps(API_BASE);
     const match = persistedId && availableWorlds.find(map => map.id === persistedId);
     if (match) {
       await loadDatabaseEntities(match.id);
-    } else if (currentRoute().view === "list") {
-      location.hash = "#/choose-world";
-      return;
+      matched = true;
     }
   } catch {
-    // offline: file entities alone still work, same as before this existed
+    // offline/unreachable server: file entities alone still work either way
+  }
+
+  if (!matched && isFirstVisit) {
+    location.hash = "#/choose-world";
+    return;
   }
   updateWorldSwitcherLabel();
   render();
@@ -275,6 +287,12 @@ function renderWorldPicker(maps: MapSummary[]): string {
     .join("")}</ul>`;
 }
 
+/** Shown on every branch of renderChooseWorldView, including the offline/error one — creating a
+ *  new world is the legacy engine's own client-side generation, which doesn't touch the API server
+ *  at all, so it stays available even when the "existing worlds" list can't be fetched. Lands on
+ *  the engine's generation-settings tab (renderMapView's `newWorld`), not an instant random map. */
+const CREATE_WORLD_HTML = `<p><a href="#/map?new=1" class="world-list-item create-world">+ Create a new world…</a></p>`;
+
 function renderChooseWorldView(): void {
   const content = el<HTMLElement>("content");
   content.innerHTML = `<h1>Choose a world</h1><p>Loading worlds…</p>`;
@@ -282,8 +300,11 @@ function renderChooseWorldView(): void {
   fetchAvailableMaps(API_BASE)
     .then((maps: MapSummary[]) => {
       availableWorlds = maps;
-      content.innerHTML = `<h1>Choose a world</h1>${renderWorldPicker(maps)}`;
-      content.querySelectorAll<HTMLButtonElement>(".world-list-item").forEach(button => {
+      content.innerHTML = `<h1>Choose a world</h1>${CREATE_WORLD_HTML}${renderWorldPicker(maps)}`;
+      // button.world-list-item, not just .world-list-item — CREATE_WORLD_HTML's link shares the
+      // class for consistent styling but is an <a href> with no data-map-id, handled by its own
+      // href navigation instead of this click-to-load-a-DB-world delegation.
+      content.querySelectorAll<HTMLButtonElement>("button.world-list-item").forEach(button => {
         button.addEventListener("click", async () => {
           await loadDatabaseEntities(Number(button.dataset.mapId));
           location.hash = "#/";
@@ -293,6 +314,7 @@ function renderChooseWorldView(): void {
     .catch((error: Error) => {
       content.innerHTML = `
         <h1>Choose a world</h1>
+        ${CREATE_WORLD_HTML}
         <p class="wiki-link-broken">Could not reach the API at ${API_BASE} — is the server running?
         (<code>cd server && npm run start</code>)</p>
         <p class="summary">${error.message}</p>
@@ -1066,7 +1088,7 @@ function render(): void {
   // The map view is a full-screen overlay (#map-panel), not a #content swap — shown only for its
   // own route, hidden for every other one (mirrors teardownBoard()'s "always clean up first").
   if (route.view === "map") {
-    void renderMapView();
+    void renderMapView(route.newWorld);
     return;
   }
   el<HTMLElement>("map-panel").setAttribute("hidden", "");
@@ -1183,15 +1205,19 @@ function sendToMapEngine(message: PlacementMessage): void {
  * Known gap, deferred on purpose (see MAPWEAVE.md's Phase 6 "Phase 3" entry): doesn't yet pass a
  * DB-connected world's seed/width/height into the engine, so a connected world doesn't auto-load
  * here the way the old iframe's `mapFrameSrc()` made it do — it falls back to whatever the engine
- * itself defaults to (last locally-saved map, or waiting for the user to generate one). */
-async function renderMapView(): Promise<void> {
+ * itself defaults to (last locally-saved map, or waiting for the user to generate one).
+ *
+ * `newWorld` is the "create a new world" landing choice (renderChooseWorldView): land on the
+ * engine's generation-settings tab instead of the default idle-state "no map yet" prompt. */
+async function renderMapView(newWorld?: boolean): Promise<void> {
   el<HTMLElement>("map-panel").removeAttribute("hidden");
   // Dynamic, not static, import: map-engine-host.ts bundles map.html's raw markup (see its `?raw`
   // import) — a static import here would pull that into the wiki's own eager entry chunk, shipping
   // it to every visitor whether or not they ever open the map. Confirmed by actually building both
   // ways: the wiki chunk was ~40KB with a dynamic import, 838KB with a static one.
-  const { mountMapEngine } = await import("@/services/map-engine-host");
+  const { mountMapEngine, openGenerationSettings } = await import("@/services/map-engine-host");
   await mountMapEngine(el<HTMLElement>("map-panel-mount"));
+  if (newWorld) await openGenerationSettings();
 }
 
 function cancelPendingPlacement(): void {
