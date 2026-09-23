@@ -21,6 +21,7 @@ import {
   dbRefOf,
   fetchAvailableMaps,
   fetchConnectedMapInfo,
+  getConnectedMapId,
   loadGeneratedEntities,
   type MapSummary,
   setConnectedMapId
@@ -654,12 +655,16 @@ function renderEntityView(slug: string, tabParam?: string): void {
         ? boardSectionHtml(slug, Boolean(canEdit))
         : isMapTab
           ? `<section id="map-tab-panel">
-              <p class="muted">${
-                activeTab?.mapId
-                  ? `Linked map #${activeTab.mapId}.`
-                  : "No map linked to this tab yet — full inline map embedding lands in Phase 3."
-              }</p>
-              <button id="map-tab-open-btn" type="button">Open map</button>
+              ${
+                activeTab?.mapId !== undefined && activeTab.mapId !== getConnectedMapId()
+                  ? `<p id="map-tab-mismatch" class="muted">This tab is linked to map #${activeTab.mapId}, but the ${
+                      getConnectedMapId() !== undefined
+                        ? `currently loaded map is #${getConnectedMapId()}`
+                        : "engine has no database world loaded"
+                    } — showing that below (switching a tab to a specific database world without a full reload isn't wired up yet).</p>`
+                  : ""
+              }
+              <div id="map-tab-mount"></div>
             </section>`
           : `<article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>`
     }
@@ -669,7 +674,7 @@ function renderEntityView(slug: string, tabParam?: string): void {
   if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
   if (isBoard) mountBoardView(slug, entity, Boolean(canEdit));
   if (isBoardTab) mountBoardView(slug, entity, Boolean(canEdit), activeTabId);
-  if (isMapTab) el<HTMLButtonElement>("map-tab-open-btn").addEventListener("click", () => void renderMapView());
+  if (isMapTab) void mountMapTabView();
 
   el<HTMLButtonElement>("place-on-map-btn")?.addEventListener("click", () => {
     const kind = el<HTMLSelectElement>("place-kind").value as PlacementKind;
@@ -1219,6 +1224,22 @@ async function renderMapView(newWorld?: boolean): Promise<void> {
   const { mountMapEngine, openGenerationSettings } = await import("@/services/map-engine-host");
   await mountMapEngine(el<HTMLElement>("map-panel-mount"));
   if (newWorld) await openGenerationSettings();
+}
+
+/** A page's "map" tab (Phase 6 "Phase 5" — cross-tab integration, see MAPWEAVE.md): embeds the same
+ *  live map-engine singleton `renderMapView` uses, inline in the tab's own content area instead of
+ *  the full-screen overlay — resolves the "full inline map embedding lands in Phase 3" placeholder
+ *  Phase 2 left behind, now that Phase 3 actually built mountMapEngine() to accept any container.
+ *
+ *  Same known gap as renderMapView, doubly relevant here: a tab's own `mapId` isn't used to load
+ *  that specific database world into the engine (still needs the deferred seed/width/height wiring)
+ *  — this always shows whichever world the engine currently has loaded, with a mismatch notice in
+ *  the template above when that differs from the tab's declared `mapId`. */
+async function mountMapTabView(): Promise<void> {
+  const mount = el<HTMLElement>("map-tab-mount");
+  if (!mount) return; // the user navigated away before this resolved — nothing to mount into
+  const { mountMapEngine } = await import("@/services/map-engine-host");
+  await mountMapEngine(mount);
 }
 
 function cancelPendingPlacement(): void {

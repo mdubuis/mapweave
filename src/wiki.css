@@ -726,9 +726,27 @@ button:hover {
 }
 
 #map-tab-panel {
-  padding: 1.5rem;
-  text-align: center;
-  background: var(--bg-alt);
+  height: 70vh;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  overflow: hidden;
+}
+#map-tab-mismatch {
+  flex: none;
+  padding: 0.6rem 1rem;
+  text-align: center;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+#map-tab-mount {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+#map-tab-mount #map-engine-host-root {
+  position: absolute;
+  inset: 0;
 }
