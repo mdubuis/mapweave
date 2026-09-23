@@ -597,6 +597,20 @@ class HeightmapModule {
     return heights;
   }
 
+  /** Seeds this graph's heights directly from a parent map's terrain instead of computing a fresh
+   *  heightmap from a template or image — a burg-scoped detail map's terrain inheritance (Phase 6
+   *  "Phase 4", see MAPWEAVE.md). `parentHeights` must already be indexed by THIS graph's own grid
+   *  cells (resampled from the parent's coordinate space by the caller — see
+   *  server/src/generation/detail-map.ts), not the parent's own cell indices. Land/water
+   *  classification downstream (Features.markupGrid/markupPack) is purely height-vs-sea-level, so
+   *  coastline continuity at the seam falls out for free as long as both maps use the same 0-100
+   *  scale — no separate coastline-matching step needed. */
+  fromParentSlice(graph: GridGraph, parentHeights: Uint8Array): Uint8Array {
+    this.clearData();
+    graph.cells.h = parentHeights;
+    return parentHeights;
+  }
+
   fromTemplate(graph: GridGraph, id: string, config: MapData["graph"] = options.map.graph): Uint8Array {
     const templateString = heightmapTemplates[id]?.template || "";
     const steps = templateString.split("\n");

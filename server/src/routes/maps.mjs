@@ -1,15 +1,23 @@
 import { pool, withTransaction } from "../db.mjs";
+import { generateDetailMap } from "../generation/detail-map.ts";
 import { generateMap } from "../generation/generate.ts";
 import { importPack } from "../import.mjs";
 
-// generateMap() mutates process-wide globals (pack/grid/options) — concurrent calls would corrupt
-// each other's result, so requests are serialized through this promise chain instead of running in
-// parallel. Fine for a local single-user server; would need a real queue for anything more.
+// generateMap()/generateDetailMap() both mutate the same process-wide globals (pack/grid/options)
+// — concurrent calls, of either kind, would corrupt each other's result, so every generation
+// request shares this one promise chain instead of running in parallel. Fine for a local
+// single-user server; would need a real queue for anything more.
 let generationQueue = Promise.resolve();
-function runGeneration(request) {
-  const result = generationQueue.then(() => generateMap(request));
+function enqueueGeneration(task) {
+  const result = generationQueue.then(task);
   generationQueue = result.catch(() => {}); // one failed generation must not wedge the queue
   return result;
+}
+function runGeneration(request) {
+  return enqueueGeneration(() => generateMap(request));
+}
+function runDetailGeneration(request) {
+  return enqueueGeneration(() => generateDetailMap(pool, request));
 }
 
 // Per-layer table/column config for the GeoJSON endpoint — the :layer path param is validated
@@ -55,6 +63,44 @@ export default async function mapsRoutes(app) {
     // rather than leaving `facts` empty for every server-generated map.
     const settingsExport = { options: { map: { seed: packExport.info.seed, graph: { width: packExport.info.width, height: packExport.info.height } } } };
     const result = await withTransaction(client => importPack(client, { packExport, settingsExport, name }));
+    return reply.code(201).send(result);
+  });
+
+  // Burg-scoped detail map (Phase 6 "Phase 4", see MAPWEAVE.md) — a new, independent map whose
+  // terrain is inherited from a slice of this map around one burg. Known, flagged gap: cultures/
+  // states/burgs are generated at full, unconstrained scale (not yet scoped down to the anchor
+  // burg's own culture/state) — a separate, not-yet-built mechanism; only the terrain is real
+  // inheritance right now.
+  app.post("/api/maps/:id/burgs/:burgId/generate-detail", async (request, reply) => {
+    const parentMapId = Number(request.params.id);
+    const burgId = Number(request.params.burgId);
+    const { seed, width, height, density, zoomFactor, name } = request.body ?? {};
+
+    let packExport;
+    try {
+      ({ packExport } = await runDetailGeneration({ parentMapId, burgId, seed, width, height, density, zoomFactor }));
+    } catch (error) {
+      return reply.code(404).send({ error: error.message });
+    }
+
+    const settingsExport = { options: { map: { seed: packExport.info.seed, graph: { width: packExport.info.width, height: packExport.info.height } } } };
+    const detailName = name ?? `${packExport.info.mapName ?? "Detail"} (detail)`;
+
+    const result = await withTransaction(async client => {
+      const imported = await importPack(client, { packExport, settingsExport, name: detailName });
+      await client.query("UPDATE maps SET parent_map_id = $1, parent_burg_id = $2 WHERE id = $3", [
+        parentMapId,
+        burgId,
+        imported.mapId
+      ]);
+      await client.query("UPDATE map_burgs SET child_map_id = $1 WHERE map_id = $2 AND burg_id = $3", [
+        imported.mapId,
+        parentMapId,
+        burgId
+      ]);
+      return imported;
+    });
+
     return reply.code(201).send(result);
   });
 

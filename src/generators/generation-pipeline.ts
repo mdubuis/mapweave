@@ -6,7 +6,14 @@ import { Coordinates } from "./coordinates";
 
 const generationPipelineSteps = [
   { id: "grid", run: ({ graph }) => Grid.prepare(graph) },
-  { id: "heightmap", run: () => HeightmapGenerator.generate() },
+  // parentHeights: a burg-scoped detail map's inherited terrain (Phase 6 "Phase 4", see
+  // MAPWEAVE.md) — already resampled onto this grid's own cells by the caller (see
+  // server/src/generation/detail-map.ts). Absent for every normal generation, which is unaffected.
+  {
+    id: "heightmap",
+    run: ({ parentHeights }) =>
+      parentHeights ? HeightmapGenerator.fromParentSlice(grid, parentHeights) : HeightmapGenerator.generate()
+  },
   { id: "markupGrid", run: () => Features.markupGrid() },
   { id: "depressionLakes", run: () => Grid.addDeepDepressionLakes() },
   { id: "nearSeaLakes", run: () => Grid.openNearSeaLakes() },
@@ -50,6 +57,8 @@ type GenerationPipelineStepId = (typeof generationPipelineSteps)[number]["id"];
 
 type GenerationContext = {
   graph?: GridGraph; // pre-created grid to use instead of generating one
+  /** Burg-scoped detail map terrain inheritance (Phase 6 "Phase 4") — see the "heightmap" step. */
+  parentHeights?: Uint8Array;
 };
 export const GenerationPipeline = new Pipeline<GenerationPipelineStepId, GenerationContext>(
   "Generation Pipeline",

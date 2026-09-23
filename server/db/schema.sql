@@ -21,6 +21,12 @@ CREATE TABLE IF NOT EXISTS maps (
   facts JSONB NOT NULL DEFAULT '{}'::jsonb,
   layers JSONB NOT NULL DEFAULT '{}'::jsonb,
   style JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Burg-scoped detail maps (Phase 6 "Phase 4", see MAPWEAVE.md): a map generated as the detail
+  -- view of one burg on another (parent) map. A map has at most one parent, so this lives here
+  -- rather than a join table; parent_burg_id is that burg's id within parent_map_id's own
+  -- map_burgs rows (not a FK by itself — meaningless without parent_map_id alongside it).
+  parent_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
+  parent_burg_id INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -102,6 +108,9 @@ CREATE TABLE IF NOT EXISTS map_burgs (
   capital BOOLEAN NOT NULL DEFAULT false,
   port BOOLEAN NOT NULL DEFAULT false,
   geom GEOMETRY(Point, 0),
+  -- The detail map generated for this burg, if any (Phase 6 "Phase 4") — the common query
+  -- direction ("does this burg have a detail map") without joining through maps.parent_burg_id.
+  child_map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
   PRIMARY KEY (map_id, burg_id)
 );
 CREATE INDEX IF NOT EXISTS map_burgs_geom_idx ON map_burgs USING GIST (geom);

@@ -39,6 +39,12 @@ export interface Burg {
   group?: string;
   link?: string;
   MFCG?: string;
+  /** Postgres id (maps.id) of this burg's generated detail map, if any — see
+   *  server/src/generation/detail-map.ts and map_burgs.child_map_id. Not persisted in the client's
+   *  own .map save format (the DB is the source of truth for this link, set by the server after
+   *  generating the detail map); this field exists so the client can read/display it once the DB
+   *  entity layer surfaces it, without inventing a second field name later. */
+  subMapId?: number;
   production?: ProductionRecord[]; // per-burg production/trade records from the last production run
   product?: number; // gross product from the last production run
   treasury?: number; // accumulated cash balance
