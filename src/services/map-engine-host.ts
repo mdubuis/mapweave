@@ -58,14 +58,32 @@ async function loadSequentially(paths: string[]): Promise<void> {
   for (const path of paths) await loadScript(path);
 }
 
+/** Parses the real map.html once — used for both the `<head>`'s inline `<style>` and the `<body>`
+ *  below, so there's only one source of truth for "what map.html actually contains" rather than two
+ *  independent DOMParser passes that could drift apart. */
+function parseLegacyDocument(): Document {
+  return new DOMParser().parseFromString(mapHtmlRaw, "text/html");
+}
+
+/** map.html's `<head>` carries one inline `<style>` block (loading-screen styling, and critically
+ *  `#map { position: absolute }`) alongside the STYLESHEETS `<link>`s above — a `<link>` can't cover
+ *  it, so it needs its own injection. Real bug found by actually loading this in a browser, not by
+ *  reading the code: without it, the map SVG falls back to static positioning and, being sized to
+ *  the full map canvas, pushes every sibling that comes after it in the body — including the whole
+ *  `#optionsContainer` (so "Generate a new map"'s Options panel) — hundreds of pixels below the
+ *  visible viewport. It never threw an error or failed a resource load, so nothing short of actually
+ *  looking at the rendered page surfaced it. */
+function legacyHeadStyles(parsed: Document): HTMLElement[] {
+  return Array.from(parsed.head.querySelectorAll("style"));
+}
+
 /** The real map.html's <body>, bundled at build time (see the `?raw` import above — a real Vite
  *  build only emits an HTML file that's a declared rollupOptions.input entry, and map.html no
  *  longer is one, so `fetch()`-ing it at runtime like the spike did would 404 in production).
  *  <script> tags are stripped (inert via innerHTML anyway — loaded explicitly via
  *  loadSequentially instead, in the real order) and never a hand-picked subset: the whole body,
  *  so this can't silently drift from the actual page. */
-function legacyBodyElement(): HTMLElement {
-  const parsed = new DOMParser().parseFromString(mapHtmlRaw, "text/html");
+function legacyBodyElement(parsed: Document): HTMLElement {
   for (const script of Array.from(parsed.body.querySelectorAll("script"))) script.remove();
 
   const container = document.createElement("div");
@@ -76,6 +94,26 @@ function legacyBodyElement(): HTMLElement {
 
 interface JQueryStatic {
   ui: { dialog: { prototype: { options: { appendTo: unknown } } } };
+}
+
+/** Restores the browser's native "an element with an id becomes a `window` global of that name"
+ *  behavior for the legacy body's contents. That behavior only ever applies to a document's real
+ *  light DOM, never to a shadow root, so once the legacy body moved into one (Phase 1) any classic
+ *  script relying on a bare `someId` reference (not `document.getElementById`/`ensureEl`) silently
+ *  broke — real, confirmed by actually loading the page, not theoretical: public/modules/ui/style.js
+ *  — a ~1000-line classic script, not yet converted to TS like the rest of this codebase — does this
+ *  well over 100 times, starting with its very first top-level statement
+ *  (`styleElementSelect.addEventListener(...)`), which threw "styleElementSelect is not defined" and
+ *  aborted everything after it in that file. Individually converting every one of those references
+ *  to `ensureEl()` would be an invasive rewrite of a legacy file CLAUDE.md says to build on top of,
+ *  not rewrite — this restores the environment the file already assumes instead, the same choice
+ *  Phase 1's getElementById/querySelector monkeypatch already made for a different implicit behavior.
+ *  Guards against clobbering a genuine existing global (`in window`), matching the browser's own
+ *  precedence — an own property always wins over id-based named access. */
+function exposeLegacyIdsAsGlobals(shadow: ShadowRoot): void {
+  for (const el of shadow.querySelectorAll<HTMLElement>("[id]")) {
+    if (el.id && !(el.id in window)) (window as unknown as Record<string, unknown>)[el.id] = el;
+  }
 }
 
 let bootPromise: Promise<HTMLElement> | undefined;
@@ -99,7 +137,9 @@ async function bootEngine(): Promise<HTMLElement> {
     shadow.appendChild(link);
   }
 
-  shadow.appendChild(legacyBodyElement());
+  const parsed = parseLegacyDocument();
+  for (const style of legacyHeadStyles(parsed)) shadow.appendChild(style);
+  shadow.appendChild(legacyBodyElement(parsed));
 
   await loadSequentially(SYNC_SCRIPTS);
 
@@ -125,6 +165,13 @@ async function bootEngine(): Promise<HTMLElement> {
   await import("@/services");
   await import("@/generators/styles-legacy");
 
+  // See exposeLegacyIdsAsGlobals's own doc comment: the deferred classic scripts below are where
+  // this was actually found to matter (public/modules/ui/style.js's very first statement threw
+  // without it) — run right before they load, once every tab panel's markup already exists (the
+  // static body above, plus every dynamically-injected one: options-tab.ts's
+  // `optionsContent.innerHTML = TEMPLATE` runs as an import side effect of lifecycle.ts, already
+  // evaluated by the `boot()` call above).
+  exposeLegacyIdsAsGlobals(shadow);
   await loadSequentially(DEFERRED_SCRIPTS);
 
   const { boot } = await import("@/components/lifecycle");

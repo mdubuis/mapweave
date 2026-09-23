@@ -254,7 +254,6 @@ function updateWorldSwitcherLabel(): void {
  */
 async function connectToPersistedWorld(): Promise<void> {
   const persistedId = Number(localStorage.getItem(WORLD_STORAGE_KEY)) || undefined;
-  const isFirstVisit = currentRoute().view === "list";
   let matched = false;
 
   try {
@@ -268,7 +267,12 @@ async function connectToPersistedWorld(): Promise<void> {
     // offline/unreachable server: file entities alone still work either way
   }
 
-  if (!matched && isFirstVisit) {
+  // Checked now, not captured before the awaits above: the user may have already navigated away
+  // (e.g. clicked "+ Create a new world" while this fetch was in flight) — redirecting over that
+  // would silently yank them back to #/choose-world mid-boot, exactly the "yanking away" this
+  // function's own doc comment says to avoid. A stale pre-fetch snapshot of the route can't tell
+  // the difference between "still on the landing route" and "was on it a moment ago."
+  if (!matched && currentRoute().view === "list") {
     location.hash = "#/choose-world";
     return;
   }
