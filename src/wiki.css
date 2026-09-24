@@ -33,10 +33,53 @@ body {
   color: var(--fg);
 }
 
+/* Shown while switching worlds (loadDatabaseEntities) — that fetch had no feedback at all before,
+   so a world switch just looked frozen until it finished. A slim indeterminate bar, not a spinner
+   overlay: the sidebar/content stay interactive underneath, since nothing about switching worlds
+   actually blocks reading the current page. */
+#loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 30;
+  overflow: hidden;
+  background: transparent;
+}
+#loading-bar[hidden] {
+  display: none;
+}
+#loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  animation: loading-bar-sweep 1.1s ease-in-out infinite;
+}
+@keyframes loading-bar-sweep {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
 #app {
   display: grid;
   grid-template-columns: 280px 1fr;
   height: 100vh;
+}
+/* choose-world: a landing screen, not a wiki page — see render()'s own comment in wiki-main.ts */
+#app.landing {
+  grid-template-columns: 1fr;
+}
+#app.landing #sidebar {
+  display: none;
 }
 
 #sidebar {
@@ -248,6 +291,25 @@ a.world-list-item.create-world:hover {
   overflow-y: auto;
   max-width: 60rem;
 }
+#app.landing #content {
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.landing-view {
+  width: 100%;
+  max-width: 28rem;
+  text-align: center;
+}
+.landing-view h1 {
+  font-family: var(--font-display);
+  margin-bottom: 0.3rem;
+}
+.landing-view .landing-tagline {
+  color: var(--muted);
+  margin-bottom: 2rem;
+}
 
 .entity-header h1 {
   font-family: var(--font-display);
@@ -286,6 +348,30 @@ a.world-list-item.create-world:hover {
   border-radius: 999px;
   border: 1px solid var(--warn);
   color: var(--warn);
+}
+.entity-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+/* The primary action on a generated-stub entity (dbRef, no lore written yet) — styled distinctly
+   from the plain-text actions beside it so it reads as the thing to do, not just another link. */
+.lore-cta {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  background: var(--bg-alt);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--transition);
+}
+.lore-cta:hover {
+  background: var(--accent);
+  color: var(--bg);
 }
 .summary {
   color: var(--muted);
@@ -474,9 +560,23 @@ a.world-list-item.create-world:hover {
   background: var(--bg);
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  transition:
+    opacity var(--transition),
+    display var(--transition) allow-discrete;
+  /* Map ↔ wiki was an instant hard cut before (display:none can't itself be transitioned, and
+     nothing declared what a just-shown element should animate *from*) — a deliberate, minimal fade
+     rather than a slide/scale, so it doesn't fight the shell reflowing underneath. @starting-style
+     here (on the visible-state rule, not [hidden] below) is what lets removing [hidden] animate in
+     from opacity 0 instead of just appearing; allow-discrete is what lets display itself hold off
+     switching away from flex until the fade-out below actually finishes. */
+  @starting-style {
+    opacity: 0;
+  }
 }
 #map-panel[hidden] {
   display: none;
+  opacity: 0;
 }
 #map-panel-header {
   display: flex;

@@ -218,18 +218,24 @@ async function reloadFromDirectory(): Promise<void> {
 }
 
 async function loadDatabaseEntities(mapId: number): Promise<void> {
-  const [entities, mapInfo] = await Promise.all([
-    loadGeneratedEntities(API_BASE, mapId),
-    fetchConnectedMapInfo(API_BASE, mapId)
-  ]);
-  dbEntities = entities;
-  connectedMap = mapInfo;
-  setConnectedMapId(mapInfo.id);
-  mergeEntitySources();
-  localStorage.setItem(WORLD_STORAGE_KEY, String(mapId));
-  updateWorldSwitcherLabel();
-  renderEraSelect();
-  renderSidebar(el<HTMLInputElement>("search").value);
+  // No feedback here before — a world switch just looked frozen until both fetches resolved.
+  el<HTMLElement>("loading-bar").removeAttribute("hidden");
+  try {
+    const [entities, mapInfo] = await Promise.all([
+      loadGeneratedEntities(API_BASE, mapId),
+      fetchConnectedMapInfo(API_BASE, mapId)
+    ]);
+    dbEntities = entities;
+    connectedMap = mapInfo;
+    setConnectedMapId(mapInfo.id);
+    mergeEntitySources();
+    localStorage.setItem(WORLD_STORAGE_KEY, String(mapId));
+    updateWorldSwitcherLabel();
+    renderEraSelect();
+    renderSidebar(el<HTMLInputElement>("search").value);
+  } finally {
+    el<HTMLElement>("loading-bar").setAttribute("hidden", "");
+  }
 }
 
 /** Reflects the connected world's name in the sidebar control — looked up from availableWorlds
@@ -301,12 +307,16 @@ const CREATE_WORLD_HTML = `<p><a href="#/map?new=1" class="world-list-item creat
 
 function renderChooseWorldView(): void {
   const content = el<HTMLElement>("content");
-  content.innerHTML = `<h1>Choose a world</h1><p>Loading worlds…</p>`;
+  content.innerHTML = `<div class="landing-view"><h1>Mapweave</h1><p>Loading worlds…</p></div>`;
 
   fetchAvailableMaps(API_BASE)
     .then((maps: MapSummary[]) => {
       availableWorlds = maps;
-      content.innerHTML = `<h1>Choose a world</h1>${CREATE_WORLD_HTML}${renderWorldPicker(maps)}`;
+      content.innerHTML = `<div class="landing-view">
+        <h1>Mapweave</h1>
+        <p class="landing-tagline">Choose a world to continue, or start a new one</p>
+        ${CREATE_WORLD_HTML}${renderWorldPicker(maps)}
+      </div>`;
       // button.world-list-item, not just .world-list-item — CREATE_WORLD_HTML's link shares the
       // class for consistent styling but is an <a href> with no data-map-id, handled by its own
       // href navigation instead of this click-to-load-a-DB-world delegation.
@@ -318,15 +328,15 @@ function renderChooseWorldView(): void {
       });
     })
     .catch((error: Error) => {
-      content.innerHTML = `
-        <h1>Choose a world</h1>
+      content.innerHTML = `<div class="landing-view">
+        <h1>Mapweave</h1>
+        <p class="landing-tagline">Choose a world to continue, or start a new one</p>
         ${CREATE_WORLD_HTML}
         <p class="wiki-link-broken">Could not reach the API at ${API_BASE} — is the server running?
         (<code>cd server && npm run start</code>)</p>
         <p class="summary">${error.message}</p>
-      `;
+      </div>`;
     });
-  renderSidebar(el<HTMLInputElement>("search").value);
 }
 
 /** Quick world switch from anywhere in the wiki, without leaving the page you're on (unlike
@@ -644,7 +654,11 @@ function renderEntityView(slug: string, tabParam?: string): void {
       <div class="entity-actions">
         ${mapHref ? `<a href="${mapHref}">View on map</a>` : ""}
         ${canEdit ? `<button id="edit-btn" type="button">Edit</button>` : ""}
-        ${dbRef ? `<a href="#/new?title=${encodeURIComponent(frontmatter.title)}">Write a lore page for this ↗</a>` : ""}
+        ${
+          dbRef
+            ? `<a href="#/new?title=${encodeURIComponent(frontmatter.title)}" class="lore-cta">✎ Write a lore page for this</a>`
+            : ""
+        }
       </div>
     </header>
     ${placeOnMapHtml}
@@ -1092,6 +1106,18 @@ function renderTimelineView(): void {
 function render(): void {
   teardownBoard();
   const route = currentRoute();
+
+  // choose-world is a landing screen, not a wiki page — picking or creating a world is the whole
+  // point of being there, so the wiki's own sidebar (entity list, search, "+ New page", a second
+  // world-switcher) is noise around it, not context. #app.landing drops the sidebar column entirely
+  // (see wiki.css) rather than just hiding #sidebar, so #content actually gets the freed width back.
+  el<HTMLElement>("app").classList.toggle("landing", route.view === "choose-world");
+  if (route.view === "choose-world") {
+    el<HTMLElement>("map-panel").setAttribute("hidden", "");
+    renderChooseWorldView();
+    return;
+  }
+
   renderEraSelect();
   renderSidebar(el<HTMLInputElement>("search").value);
 
@@ -1108,7 +1134,6 @@ function render(): void {
   else if (route.view === "quests") renderQuestBoardView();
   else if (route.view === "sessions") renderSessionLogView();
   else if (route.view === "timeline") renderTimelineView();
-  else if (route.view === "choose-world") renderChooseWorldView();
   else renderHomeView();
 }
 

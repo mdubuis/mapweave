@@ -1,11 +1,16 @@
 /**
- * Timeline UI for the map engine: a small floating dropdown letting the user jump between eras,
- * each a full `.map` snapshot under public/maps/ (see wiki/SCHEMA.md). Reuses FMG's existing
- * `?maplink=` URL param to actually load the file — no new load path, just navigation. Renders
- * nothing when the wiki defines no "type: era" entities, so untouched projects see no change at
- * all. Explicitly invoked once by map-engine-host.ts right after the engine itself boots — not
- * self-bootstrapping from DOMContentLoaded anymore, since the map engine is no longer its own
+ * Timeline UI for the map engine: a small toolbar button that reveals a dropdown for jumping
+ * between eras, each a full `.map` snapshot under public/maps/ (see wiki/SCHEMA.md). Reuses FMG's
+ * existing `?maplink=` URL param to actually load the file — no new load path, just navigation.
+ * Renders nothing when the wiki defines no "type: era" entities, so untouched projects see no
+ * change at all. Explicitly invoked once by map-engine-host.ts right after the engine itself boots
+ * — not self-bootstrapping from DOMContentLoaded anymore, since the map engine is no longer its own
  * document with its own load event (see MAPWEAVE.md's Phase 6 "Phase 3").
+ *
+ * The dropdown used to show itself automatically whenever the wiki had any eras at all — moved
+ * behind an explicit toggle button (user's own request, Phase 6 continued) since not every world
+ * with an eras entity type defined is mid-timeline browsing; a floating control that's always up
+ * regardless of intent was more clutter than a convenience.
  */
 
 import { showDataTip } from "@/components/tooltips";
@@ -33,17 +38,39 @@ function injectStyles(mountRoot: ParentNode): void {
       left: 50%;
       transform: translateX(-50%);
       z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+    }
+    #eraSwitcherToggle {
       background: var(--bg-dialogs, rgba(20, 20, 20, 0.85));
       border: 1px solid var(--dark-solid, #555);
       border-radius: var(--radius, 6px);
       box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.2));
-      padding: 0.25em 0.5em;
-      transition: box-shadow var(--transition, 0.15s ease);
+      color: inherit;
+      font: inherit;
+      padding: 0.25em 0.6em;
+      cursor: pointer;
+      transition:
+        box-shadow var(--transition, 0.15s ease),
+        color var(--transition, 0.15s ease);
     }
-    #eraSwitcher:hover {
+    #eraSwitcherToggle:hover,
+    #eraSwitcherToggle[aria-expanded="true"] {
       box-shadow: var(--shadow, 0 6px 20px rgba(0, 0, 0, 0.3));
+      color: var(--accent, #4f8ef7);
     }
-    #eraSwitcher select {
+    #eraSwitcherPanel {
+      background: var(--bg-dialogs, rgba(20, 20, 20, 0.85));
+      border: 1px solid var(--dark-solid, #555);
+      border-radius: var(--radius, 6px);
+      box-shadow: var(--shadow, 0 6px 20px rgba(0, 0, 0, 0.3));
+      padding: 0.25em 0.5em;
+    }
+    #eraSwitcherPanel[hidden] {
+      display: none;
+    }
+    #eraSwitcherSelect {
       background: transparent;
       color: inherit;
       border: none;
@@ -61,6 +88,7 @@ export function initEraSwitcher(): void {
   injectStyles(mountRoot);
 
   const current = selectedMaplink();
+  const currentEra = eras.find(era => absoluteMapUrl(era.mapFile!) === current);
   const options = eras
     .map(era => {
       const url = absoluteMapUrl(era.mapFile!);
@@ -70,11 +98,29 @@ export function initEraSwitcher(): void {
 
   const container = document.createElement("div");
   container.id = "eraSwitcher";
-  container.innerHTML = `<select id="eraSwitcherSelect" data-tip="Load the map for a different era of this world">
-    <option value=""${current ? "" : " selected"} disabled>Select an era…</option>${options}
-  </select>`;
+  container.innerHTML = `
+    <button
+      id="eraSwitcherToggle"
+      type="button"
+      aria-expanded="false"
+      data-tip="Browse this world's other eras"
+    >${currentEra ? currentEra.label : "Eras"} ▾</button>
+    <div id="eraSwitcherPanel" hidden>
+      <select id="eraSwitcherSelect" data-tip="Load the map for a different era of this world">
+        <option value=""${current ? "" : " selected"} disabled>Select an era…</option>${options}
+      </select>
+    </div>`;
   mountRoot.appendChild(container);
   container.addEventListener("mousemove", debounce(showDataTip, 50));
+
+  const toggle = container.querySelector<HTMLButtonElement>("#eraSwitcherToggle")!;
+  const panel = container.querySelector<HTMLElement>("#eraSwitcherPanel")!;
+  toggle.addEventListener("click", () => {
+    const isOpen = !panel.hasAttribute("hidden");
+    if (isOpen) panel.setAttribute("hidden", "");
+    else panel.removeAttribute("hidden");
+    toggle.setAttribute("aria-expanded", String(!isOpen));
+  });
 
   container.querySelector("select")!.addEventListener("change", event => {
     const url = (event.target as HTMLSelectElement).value;

@@ -40,7 +40,9 @@ button {
 input,
 select,
 textarea {
-  border: 1px solid #dbdfe6;
+  /* Was a hardcoded light gray (#dbdfe6) — matched FMG's original light theme's own borders by
+     coincidence, but reads as a pale halo against the dark theme now aligned with the wiki. */
+  border: 1px solid var(--border, #383c44);
   border-radius: var(--radius-sm);
   box-sizing: border-box;
   transition:
@@ -432,6 +434,16 @@ button.ui-button:disabled:hover {
   border-color: var(--dark-solid);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+}
+
+/* libs/jquery-ui.css's own `body .ui-dialog { background-color: inherit; ...}` never matches here —
+   that selector requires a literal <body> ancestor, which doesn't exist inside the shadow root the
+   map is hosted in (a plain <div>, not <body> — see map-engine-host.ts's legacyBodyElement()). Real
+   bug found by actually opening a dialog in a browser: every jQuery UI dialog (burg editor, states
+   editor, etc.) rendered fully transparent, `rgba(0, 0, 0, 0)`, confirmed via getComputedStyle. Set
+   directly here instead of patching the vendored library file. */
+.ui-dialog {
+  background-color: var(--bg-dialogs);
 }
 
 .ui-dialog .ui-dialog-titlebar button {
