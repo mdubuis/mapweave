@@ -202,9 +202,17 @@ test("all 12 shipped presets parse as the new format with zero warnings", () => 
   expect(warn).not.toHaveBeenCalled();
 });
 
-test("the shipped default preset is exactly the converted fixture", () => {
+test("the shipped default preset is exactly the converted fixture, with one deliberate override", () => {
   const shipped = JSON.parse(fs.readFileSync(path.join(__dirname, "default-styles.json"), "utf8"));
-  expect(presetFromLegacy(fixture as any)).toEqual(shipped);
+  const converted = presetFromLegacy(fixture as any);
+  // landmass.attrs.fill is the one deliberate divergence from the legacy fixture's own converted
+  // value: real bug found by actually generating a map with the Leaflet migration's territory/biome
+  // panes active — the legacy SVG's landmass rect paints over them by design (mountLegacySvg), so any
+  // opaque fill here, even the fixture's own pale one, hides Leaflet-rendered content completely. See
+  // draw-landmass.ts's own doc comment. The fixture itself stays untouched (it represents the real
+  // legacy format, not Mapweave's own Leaflet-era choices), so this override lives here instead.
+  (converted as { landmass: { attrs: { fill: string } } }).landmass.attrs.fill = "none";
+  expect(converted).toEqual(shipped);
 });
 
 test("save.ts's master-compat shim: a top-level anchors:{} still parses clean", () => {

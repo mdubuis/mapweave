@@ -133,6 +133,74 @@ describe("installShadowDomBridge — querySelector", () => {
   });
 });
 
+describe("installShadowDomBridge — querySelectorAll", () => {
+  beforeEach(() => installShadowDomBridge());
+
+  it("returns light-DOM matches unchanged when the shadow root has none", () => {
+    const a = document.createElement("div");
+    a.className = "qa-light";
+    const b = document.createElement("div");
+    b.className = "qa-light";
+    document.body.append(a, b);
+
+    expect(Array.from(document.querySelectorAll(".qa-light"))).toEqual([a, b]);
+  });
+
+  it("falls back to a registered shadow root for a compound selector, unlike querySelector", () => {
+    const { shadow } = attachShadowHost();
+    const shadowEl = document.createElement("div");
+    shadowEl.className = "qa-shadow";
+    shadow.appendChild(shadowEl);
+    registerShadowRoot(shadow);
+
+    expect(Array.from(document.querySelectorAll(".qa-shadow"))).toEqual([shadowEl]);
+  });
+
+  it("concatenates light-DOM and shadow-root matches, light first", () => {
+    const { shadow } = attachShadowHost();
+    const lightEl = document.createElement("div");
+    lightEl.className = "qa-both";
+    document.body.appendChild(lightEl);
+    const shadowEl = document.createElement("div");
+    shadowEl.className = "qa-both";
+    shadow.appendChild(shadowEl);
+    registerShadowRoot(shadow);
+
+    expect(Array.from(document.querySelectorAll(".qa-both"))).toEqual([lightEl, shadowEl]);
+  });
+
+  it("checks multiple registered shadow roots", () => {
+    const first = attachShadowHost();
+    const second = attachShadowHost();
+    registerShadowRoot(first.shadow);
+    registerShadowRoot(second.shadow);
+
+    const firstEl = document.createElement("div");
+    firstEl.className = "qa-multi";
+    first.shadow.appendChild(firstEl);
+    const secondEl = document.createElement("div");
+    secondEl.className = "qa-multi";
+    second.shadow.appendChild(secondEl);
+
+    expect(Array.from(document.querySelectorAll(".qa-multi"))).toEqual([firstEl, secondEl]);
+  });
+
+  it("returns an empty, iterable result when nothing matches anywhere", () => {
+    attachShadowHost();
+    const result = document.querySelectorAll(".qa-nowhere");
+    expect(Array.from(result)).toEqual([]);
+  });
+
+  it("does not fall back into an unregistered shadow root", () => {
+    const { shadow } = attachShadowHost(); // note: never registered
+    const shadowEl = document.createElement("div");
+    shadowEl.className = "qa-not-registered";
+    shadow.appendChild(shadowEl);
+
+    expect(Array.from(document.querySelectorAll(".qa-not-registered"))).toEqual([]);
+  });
+});
+
 describe("installShadowDomBridge — idempotence", () => {
   it("installing twice does not double-wrap or break lookups", () => {
     installShadowDomBridge();
@@ -189,5 +257,6 @@ describe("_resetShadowDomBridgeForTests", () => {
     _resetShadowDomBridgeForTests();
     expect(document.getElementById("reset-check")).toBeNull();
     expect(document.querySelector("#reset-check")).toBeNull();
+    expect(Array.from(document.querySelectorAll("#reset-check"))).toEqual([]);
   });
 });

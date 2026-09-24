@@ -29,7 +29,7 @@
   "landmass": {
     "attrs": {
       "opacity": 1,
-      "fill": "#eef6fb",
+      "fill": "none",
       "filter": null
     }
   },

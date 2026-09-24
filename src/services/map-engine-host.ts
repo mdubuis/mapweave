@@ -13,6 +13,18 @@
  * mirroring how the old iframe-based map panel kept its document alive across show/hide.
  */
 
+// `?inline` (not a plain import): Vite's default CSS-import behavior injects into document.head —
+// exactly what leaflet-map.ts's own `import "leaflet/dist/leaflet.css"` does, correctly, for the
+// wiki's own board feature (a light-DOM-hosted Leaflet map). But that means Leaflet's own structural
+// CSS (.leaflet-pane { position: absolute }, and everything else it depends on) never reaches this
+// shadow root at all — a real, severe bug found by actually generating a map and finding water
+// sometimes rendered off-screen: legacyPane (leaflet-map.ts's mountLegacySvg) landed at
+// `position: static` instead of `absolute`, fell into normal document flow below the other Leaflet
+// panes, and the whole #map SVG (everything: ocean, land, all of it) ended up positioned hundreds of
+// pixels below the visible viewport — worse or better depending on how much flow height the other
+// panes happened to have, which is exactly the "sometimes" in the bug report. Injected as its own
+// inline <style> below, same technique map.html's own inline <style> already uses here.
+import leafletCss from "leaflet/dist/leaflet.css?inline";
 import { getLeafletMap, isLeafletMapReady } from "@/components/leaflet-map";
 import mapHtmlRaw from "@/map.html?raw";
 import { getPrimaryMountRoot, installShadowDomBridge, registerShadowRoot } from "@/services/shadow-dom-bridge";
@@ -167,6 +179,12 @@ async function bootEngine(): Promise<HTMLElement> {
   document.body.appendChild(host);
 
   await Promise.all(STYLESHEETS.map(href => loadStylesheet(shadow, href)));
+
+  // Inline, applies synchronously (no load event to await, unlike the <link>s above) — must be in
+  // place before boot() runs, since that's what first calls getLeafletMap() and creates its panes.
+  const leafletStyle = document.createElement("style");
+  leafletStyle.textContent = leafletCss;
+  shadow.appendChild(leafletStyle);
 
   const parsed = parseLegacyDocument();
   for (const style of legacyHeadStyles(parsed)) shadow.appendChild(style);

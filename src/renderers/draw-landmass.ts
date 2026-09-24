@@ -4,7 +4,16 @@ import { ensureEl } from "@/utils";
 
 /**
  * The landmass is a plain rect shown through the land mask. The layer also owns the shared feature
- * geometry in defs: the coastline and lakes layers reference it, so it is drawn before both of them
+ * geometry in defs: the coastline and lakes layers reference it, so it is drawn before both of them.
+ *
+ * Its own fill defaults to "none" (default-styles.json), not a real color — real bug found by
+ * actually switching to the "biomes" layer preset in a browser: the legacy SVG paints on top of
+ * Leaflet's territory panes by design (leaflet-map.ts's mountLegacySvg), so any opaque fill here,
+ * even a pale one, sits directly over Leaflet-rendered biome/state colors and hides them completely.
+ * Before the Leaflet migration this rect *was* the land's only color, painted over in the same SVG
+ * document by the biome/heightmap groups that used to render there — now those render as separate
+ * Leaflet panes underneath instead, so this rect having a visible fill of its own is what's obsolete,
+ * not the rect itself (it still anchors the land mask geometry #coastline/#lakes depend on).
  */
 export function drawLandmass(layer: Layer): void {
   TIME && console.time("drawLandmass");
