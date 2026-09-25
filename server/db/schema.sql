@@ -173,3 +173,28 @@ CREATE TABLE IF NOT EXISTS map_topology (
   grid JSONB NOT NULL DEFAULT '{}'::jsonb,
   pack JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+
+-- Lore pages, moved off the browser's local-folder File System Access API (Chromium-only, and asked
+-- to re-grant access every reload) so editing needs nothing but a connected world. `raw` is the
+-- whole frontmatter+body text, same round-trip-exact shape the file-based editor always used — type
+-- and title are duplicated out of it purely so the page list can be read without a client-side parse.
+CREATE TABLE IF NOT EXISTS wiki_pages (
+  map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  raw TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (map_id, slug)
+);
+
+-- Global across worlds, not per-map: a GM starting a second world shouldn't lose their templates,
+-- and templates are starters, not lore, so there's no per-world confidentiality reason to scope them.
+CREATE TABLE IF NOT EXISTS wiki_templates (
+  name TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  raw TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

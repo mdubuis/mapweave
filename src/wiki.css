@@ -118,13 +118,6 @@ body {
 #scenario-nav a:hover {
   color: var(--accent);
 }
-#live-indicator {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--muted);
-  margin-top: 0.25rem;
-}
-
 #world-switcher {
   position: relative;
   margin-top: 0.25rem;

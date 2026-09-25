@@ -1,13 +1,15 @@
 /**
- * Bridges a clicked map entity (burg/state/marker) to its Mapweave wiki page. The map app (map.html)
- * and the wiki app (index.html — the wiki is the app's landing page, see MAPWEAVE.md) are separate
- * bundles with no shared runtime, so this reads the same bundled `wiki/**\/*.md` snapshot the wiki
- * app browses (see src/wiki/entities.ts) — live edits made through the wiki's "Open wiki folder"
- * editor aren't visible here until the page is rebuilt/reloaded.
+ * Bridges a clicked map entity (burg/state/marker) to its Mapweave wiki page. The map engine and
+ * the wiki shell run in one merged DOM (Phase 6 — see MAPWEAVE.md), so this prefers wiki-main.ts's
+ * live, merged entity list (db-entities.ts's getLiveEntities, kept current across DB-backed page
+ * edits and world switches) and only falls back to the bundled `wiki/**\/*.md` snapshot
+ * (src/wiki/entities.ts's loadEntities) for the case this runs before the wiki shell has rendered
+ * once.
  *
  * Every lookup is era-scoped: the same burg id can point at a different (or no) wiki page from one
  * era's map to the next, since map_ref itself is keyed by era — see wiki/SCHEMA.md and src/wiki/eras.ts.
  */
+import { getLiveEntities } from "./db-entities";
 import { loadEntities } from "./entities";
 import { currentEraSlug, loadEras } from "./eras";
 import type { MapRefKind } from "./types";
@@ -22,12 +24,12 @@ export interface MapEntityIdentity {
 
 /** The era the currently loaded map belongs to, inferred from the URL — see eras.currentEraSlug */
 export function activeEra(): string {
-  const entities = loadEntities();
+  const entities = getLiveEntities() ?? loadEntities();
   return currentEraSlug(loadEras(entities));
 }
 
 export function findWikiEntitySlug(era: string, identity: Pick<MapEntityIdentity, "kind" | "id">): string | undefined {
-  const match = loadEntities().find(entity => {
+  const match = (getLiveEntities() ?? loadEntities()).find(entity => {
     const ref = entity.frontmatter.map_ref?.[era];
     return ref?.kind === identity.kind && ref.id === identity.id;
   });

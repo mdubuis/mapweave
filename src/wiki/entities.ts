@@ -10,7 +10,7 @@ import type {
   WikiFrontmatter
 } from "./types";
 
-// templates/ is excluded — it holds reusable page starters (wiki/editor.ts's loadTemplates), not
+// templates/ is excluded — it holds reusable page starters (wiki/db-editor.ts's loadWikiTemplates), not
 // real entities; it shouldn't show up in the sidebar/search/graph.
 const files = import.meta.glob(["../../wiki/**/*.md", "!../../wiki/templates/**"], {
   eager: true,

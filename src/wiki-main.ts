@@ -16,6 +16,15 @@ import {
   replaceBoardBlockInRaw
 } from "@/wiki/board";
 import {
+  createWikiPage,
+  deleteWikiTemplate,
+  loadWikiPages,
+  loadWikiTemplates,
+  type PageTemplate,
+  saveWikiPage,
+  saveWikiTemplate
+} from "@/wiki/db-editor";
+import {
   API_BASE,
   type ConnectedMapInfo,
   dbRefOf,
@@ -24,19 +33,9 @@ import {
   getConnectedMapId,
   loadGeneratedEntities,
   type MapSummary,
-  setConnectedMapId
+  setConnectedMapId,
+  setLiveEntityState
 } from "@/wiki/db-entities";
-import {
-  createEntity,
-  deleteTemplate,
-  isFileSystemAccessSupported,
-  loadFromDirectory,
-  loadTemplates,
-  type PageTemplate,
-  pickWikiDirectory,
-  saveEntity,
-  saveTemplate
-} from "@/wiki/editor";
 import {
   type AutoLinkName,
   buildAutoLinkNames,
@@ -77,16 +76,17 @@ import {
 
 // Two independent entity sources, merged into `entities` below — see src/wiki/db-entities.ts and
 // MIGRATION.md Phase 4.2. Each source reloads on its own; neither wipes the other out.
-let fileEntities: WikiEntity[] = loadEntities();
+let pageEntities: WikiEntity[] = loadEntities();
 let dbEntities: WikiEntity[] = [];
-let entities: WikiEntity[] = fileEntities;
+let entities: WikiEntity[] = pageEntities;
 let graph: WikiGraph = buildGraph(entities);
 let slugIndex = buildSlugIndex(entities);
 let eras: Era[] = loadEras(entities);
 let autoLinkNames: AutoLinkName[] = buildAutoLinkNames(entities);
-let handles = new Map<string, FileSystemFileHandle>();
-let rawContents = new Map<string, string>();
-let dirHandle: FileSystemDirectoryHandle | undefined;
+/** slug -> raw page text for every DB-backed lore page (see db-editor.ts's loadWikiPages) — doubles
+ *  as both the edit-gate check (`dbPages.has(slug)`, replacing the old dirHandle+handles check) and
+ *  the seed text an editor session starts from (replacing rawContents). */
+let dbPages = new Map<string, string>();
 /** The DB-connected map's identity — see loadDatabaseEntities. Not yet wired into the map engine's
  *  own load (see renderMapView's doc comment on that deferred gap); still used by the world
  *  switcher UI. */
@@ -111,11 +111,12 @@ function teardownBoard(): void {
 }
 
 function mergeEntitySources(): void {
-  entities = [...fileEntities, ...dbEntities];
+  entities = [...pageEntities, ...dbEntities];
   graph = buildGraph(entities);
   slugIndex = buildSlugIndex(entities);
   eras = loadEras(entities);
   autoLinkNames = buildAutoLinkNames(entities);
+  setLiveEntityState(entities); // so map-link.ts (map engine side) sees pages just written here
 }
 
 /** Sticky UI state, not solely URL-derived: browsing via wikilinks shouldn't reset the chosen era */
@@ -128,10 +129,9 @@ const VIEW_MODE_STORAGE_KEY = "mapweave.viewMode";
 let viewMode: "gm" | "player" = localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "player" ? "player" : "gm";
 
 /** User-saved page templates — a starter you pick when creating a page, beyond the built-in
- *  per-type ones (scenarioTemplateBlock in editor.ts). Live in wiki/templates/ as real files
- *  (wiki/editor.ts's loadTemplates/saveTemplate/deleteTemplate), reloaded alongside the rest of the
- *  directory in reloadFromDirectory — same file-based storage as the wiki's own content, unlike
- *  most of this app's other localStorage-backed UI state. */
+ *  per-type ones (scenarioTemplateBlock in db-editor.ts). Global across worlds, stored in Postgres'
+ *  wiki_templates table (db-editor.ts's loadWikiTemplates/saveWikiTemplate/deleteWikiTemplate),
+ *  reloaded alongside the rest of a world's pages in reloadWikiPages. */
 let templates: PageTemplate[] = [];
 
 function templatesForType(type: string): PageTemplate[] {
@@ -205,12 +205,12 @@ function currentRoute(): Route {
   return { view: "list" };
 }
 
-async function reloadFromDirectory(): Promise<void> {
-  if (!dirHandle) return;
-  const [source, loadedTemplates] = await Promise.all([loadFromDirectory(dirHandle), loadTemplates(dirHandle)]);
-  fileEntities = source.entities;
-  handles = source.handles;
-  rawContents = source.raw;
+async function reloadWikiPages(): Promise<void> {
+  const mapId = getConnectedMapId();
+  if (mapId === undefined) return;
+  const [source, loadedTemplates] = await Promise.all([loadWikiPages(API_BASE, mapId), loadWikiTemplates(API_BASE)]);
+  pageEntities = source.entities;
+  dbPages = source.raw;
   templates = loadedTemplates;
   mergeEntitySources();
   renderEraSelect();
@@ -221,13 +221,18 @@ async function loadDatabaseEntities(mapId: number): Promise<void> {
   // No feedback here before — a world switch just looked frozen until both fetches resolved.
   el<HTMLElement>("loading-bar").removeAttribute("hidden");
   try {
-    const [entities, mapInfo] = await Promise.all([
+    const [generatedEntities, mapInfo, pageSource, loadedTemplates] = await Promise.all([
       loadGeneratedEntities(API_BASE, mapId),
-      fetchConnectedMapInfo(API_BASE, mapId)
+      fetchConnectedMapInfo(API_BASE, mapId),
+      loadWikiPages(API_BASE, mapId),
+      loadWikiTemplates(API_BASE)
     ]);
-    dbEntities = entities;
+    dbEntities = generatedEntities;
     connectedMap = mapInfo;
     setConnectedMapId(mapInfo.id);
+    pageEntities = pageSource.entities;
+    dbPages = pageSource.raw;
+    templates = loadedTemplates;
     mergeEntitySources();
     localStorage.setItem(WORLD_STORAGE_KEY, String(mapId));
     updateWorldSwitcherLabel();
@@ -530,7 +535,7 @@ function mapViewHref(mapRef: MapRef | undefined): string | undefined {
  *  this world defines eras at all — have one selected (an unscoped map_ref would be invisible in
  *  every era's view, see isEntityInEra). */
 function canPlaceOnMap(entity: WikiEntity): boolean {
-  if (!dirHandle || !handles.has(entity.slug)) return false;
+  if (!dbPages.has(entity.slug)) return false;
   if (Object.keys(entity.frontmatter.map_ref ?? {}).length > 0) return false;
   if (eras.length > 0 && !activeEra) return false;
   return true;
@@ -596,7 +601,7 @@ function renderEntityView(slug: string, tabParam?: string): void {
       ? `<span class="map-ref-badge muted">linked on ${eraCount} era${eraCount === 1 ? "" : "s"} — pick one to view</span>`
       : "";
   const tags = (frontmatter.tags ?? []).map(tag => `<span class="tag">${tag}</span>`).join(" ");
-  const canEdit = dirHandle && handles.has(slug);
+  const canEdit = dbPages.has(slug);
   const mapHref = mapViewHref(resolved.mapRef);
   const dbRef = dbRefOf(entity);
 
@@ -781,12 +786,11 @@ function mountBoardView(slug: string, entity: WikiEntity, canEdit: boolean, tabI
   el<HTMLButtonElement>("board-delete-btn").addEventListener("click", () => handle.deleteSelected());
 
   el<HTMLButtonElement>("board-save-btn").addEventListener("click", async () => {
-    const fileHandle = handles.get(slug);
-    const raw = rawContents.get(slug);
-    if (!fileHandle || raw === undefined) return;
+    const raw = dbPages.get(slug);
+    if (raw === undefined) return;
     const newRaw = tabId ? replaceBoardBlockForTabInRaw(raw, tabId, data) : replaceBoardBlockInRaw(raw, data);
-    await saveEntity(fileHandle, newRaw);
-    await reloadFromDirectory();
+    await saveWikiPage(API_BASE, getConnectedMapId()!, slug, newRaw);
+    await reloadWikiPages();
     renderEntityView(slug, tabId);
   });
 }
@@ -813,13 +817,12 @@ function debounceTrailing<T extends (...args: never[]) => void>(fn: T, ms: numbe
 function renderEditorView(slug: string): void {
   teardownBoard();
   const entity = byslug(slug);
-  const handle = handles.get(slug);
-  if (!entity || !handle) {
+  const raw = dbPages.get(slug);
+  if (!entity || raw === undefined) {
     renderEntityView(slug);
     return;
   }
 
-  const raw = rawContents.get(slug) ?? "";
   const content = el<HTMLElement>("content");
   content.innerHTML = `
     <header class="entity-header">
@@ -901,15 +904,15 @@ function renderEditorView(slug: string): void {
   el<HTMLButtonElement>("cancel-btn").addEventListener("click", () => renderEntityView(slug));
   el<HTMLButtonElement>("save-btn").addEventListener("click", async () => {
     const selectedType = el<HTMLSelectElement>("editor-type").value;
-    await saveEntity(handle, patchFrontmatterType(textarea.value, selectedType));
-    await reloadFromDirectory();
+    await saveWikiPage(API_BASE, getConnectedMapId()!, slug, patchFrontmatterType(textarea.value, selectedType));
+    await reloadWikiPages();
     renderEntityView(slug);
   });
   el<HTMLButtonElement>("save-template-btn").addEventListener("click", async () => {
     const name = window.prompt("Template name:");
     if (!name?.trim()) return;
-    await saveTemplate(dirHandle!, name.trim(), textarea.value);
-    templates = await loadTemplates(dirHandle!);
+    await saveWikiTemplate(API_BASE, name.trim(), textarea.value);
+    templates = await loadWikiTemplates(API_BASE);
   });
 }
 
@@ -917,12 +920,12 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
   const content = el<HTMLElement>("content");
   const mapRefNote = mapRef ? `<p class="summary">Linking to map ${mapRef.kind} #${mapRef.id} once created.</p>` : "";
 
-  if (!dirHandle) {
+  const mapId = getConnectedMapId();
+  if (mapId === undefined) {
     content.innerHTML = `
       <h1>“${title}” doesn't have a page yet</h1>
       ${mapRefNote}
-      <p>Open a wiki folder (top left) to create it here, or add a file by hand under
-      <code>wiki/</code> following the schema in <code>wiki/SCHEMA.md</code>.</p>
+      <p><a href="#/choose-world">Choose a world</a> first to create pages in it.</p>
     `;
     return;
   }
@@ -956,8 +959,8 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
   el<HTMLButtonElement>("delete-template-btn").addEventListener("click", async () => {
     const name = el<HTMLSelectElement>("new-template").value;
     if (name) {
-      await deleteTemplate(dirHandle!, name);
-      templates = await loadTemplates(dirHandle!);
+      await deleteWikiTemplate(API_BASE, name);
+      templates = await loadWikiTemplates(API_BASE);
     }
     refreshTemplateOptions();
   });
@@ -966,8 +969,8 @@ function renderNewEntityView(title: string, mapRef?: MapRef): void {
     const type = el<HTMLSelectElement>("new-type").value;
     const templateName = el<HTMLSelectElement>("new-template").value;
     const templateRaw = templateName ? templates.find(t => t.name === templateName)?.raw : undefined;
-    const { slug } = await createEntity(dirHandle!, title, type, mapRef, activeEra ?? DEFAULT_ERA, templateRaw);
-    await reloadFromDirectory();
+    const { slug } = await createWikiPage(API_BASE, mapId, title, type, mapRef, activeEra ?? DEFAULT_ERA, templateRaw);
+    await reloadWikiPages();
     location.hash = `#/entity/${encodeURIComponent(slug)}`;
   });
 }
@@ -1297,12 +1300,12 @@ async function handlePlacementMessage(message: PlacementMessage): Promise<void> 
   pendingPlacement = undefined;
 
   if (message.type === PLACEMENT_RESULT) {
-    const handle = handles.get(slug);
-    const raw = rawContents.get(slug);
-    if (handle && raw !== undefined) {
+    const raw = dbPages.get(slug);
+    const mapId = getConnectedMapId();
+    if (raw !== undefined && mapId !== undefined) {
       const mapRef: MapRef = { kind: message.kind, id: message.id, name: message.name, cell: message.cell };
-      await saveEntity(handle, insertMapRefBlock(raw, era, mapRef));
-      await reloadFromDirectory();
+      await saveWikiPage(API_BASE, mapId, slug, insertMapRefBlock(raw, era, mapRef));
+      await reloadWikiPages();
     }
     el<HTMLElement>("map-panel").setAttribute("hidden", "");
   }
@@ -1340,20 +1343,6 @@ function initToolbar(): void {
   el<HTMLSelectElement>("era-select").addEventListener("change", event => {
     activeEra = (event.target as HTMLSelectElement).value || undefined;
     renderSidebar(el<HTMLInputElement>("search").value);
-    render();
-  });
-
-  const openFolderBtn = el<HTMLButtonElement>("open-folder-btn");
-  if (!isFileSystemAccessSupported()) {
-    openFolderBtn.disabled = true;
-    openFolderBtn.title = "Only supported in Chromium-based browsers";
-  }
-  openFolderBtn.addEventListener("click", async () => {
-    const dir = await pickWikiDirectory();
-    if (!dir) return;
-    dirHandle = dir;
-    await reloadFromDirectory();
-    el<HTMLElement>("live-indicator").textContent = `Editing: ${dir.name}/`;
     render();
   });
 

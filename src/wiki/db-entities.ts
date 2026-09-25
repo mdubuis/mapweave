@@ -70,6 +70,24 @@ export function getConnectedMapId(): number | undefined {
   return connectedMapId;
 }
 
+/** wiki-main.ts's live, merged entity list/slug index — same cross-module-live-state pattern as
+ *  connectedMapId above. Lets map-link.ts (the map engine's "resolve a clicked burg to its wiki
+ *  page" lookup) see pages just created/edited in the DB-backed wiki instead of only the bundled
+ *  wiki/**\/*.md snapshot entities.ts's loadEntities() returns. */
+let liveEntities: WikiEntity[] | undefined;
+export function setLiveEntityState(entities: WikiEntity[]): void {
+  liveEntities = entities;
+}
+export function getLiveEntities(): WikiEntity[] | undefined {
+  return liveEntities;
+}
+/** Test-only: undoes setLiveEntityState so map-link.test.ts's live-vs-fallback cases don't leak
+ *  module state into each other (this state is otherwise never cleared — a real session sets it
+ *  once per render and never needs to go back to "unset"). */
+export function _resetLiveEntityStateForTests(): void {
+  liveEntities = undefined;
+}
+
 export interface DetailMapResult {
   mapId: number;
   name: string;
