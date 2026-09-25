@@ -92,6 +92,37 @@ function loadStylesheet(shadow: ShadowRoot, href: string): Promise<void> {
   });
 }
 
+/** icons.css's own `@font-face` (a base64-embedded WOFF2 — see that file's own header) registers
+ *  fine for CSS cascade matching inside this shadow root — every icon-font element's computed style
+ *  correctly reports `font-family: icons` and the right `content: '\fXXX'` codepoint — but it never
+ *  actually paints anything: `document.fonts` (the one, document-wide FontFaceSet the CSS Font
+ *  Loading spec defines) never gains an "icons" entry at all when the `@font-face` rule only ever
+ *  lived in a shadow root's own `<link>`. The browser matches the family name for style resolution
+ *  without ever loading the underlying resource for rendering. Real bug found by actually opening a
+ *  dialog and looking, not by reading CSS: every icon-font glyph anywhere (toolbar buttons, the
+ *  wiki-link icon, burg feature markers — anything using icons.css's own
+ *  `.icon-X:before { content: '\fXXX' }` convention) rendered as nothing, despite every computed
+ *  style checking out. Confirmed the font data itself is fine — loading the exact same bytes via the
+ *  FontFace API directly succeeds — so this loads it that way ourselves and registers it on
+ *  `document.fonts`, which does make it render. Same rationale as leafletCss's manual `<style>`
+ *  injection below: another shadow-root CSS feature, this time `@font-face` specifically, that
+ *  doesn't work passively and needs doing by hand. */
+async function loadIconFont(): Promise<void> {
+  const cssText = await fetch(`${BASE}icons.css`).then(response => response.text());
+  const match = cssText.match(/src:\s*url\('(data:[^']+)'\)\s*format\('woff2'\)/);
+  if (!match) {
+    console.error("Could not find icons.css's own @font-face src — icon-font glyphs will be blank.");
+    return;
+  }
+  try {
+    const fontFace = new FontFace("icons", `url(${match[1]})`);
+    await fontFace.load();
+    document.fonts.add(fontFace);
+  } catch (error) {
+    console.error("Failed to load icons.css's icon font:", error);
+  }
+}
+
 /** Parses the real map.html once — used for both the `<head>`'s inline `<style>` and the `<body>`
  *  below, so there's only one source of truth for "what map.html actually contains" rather than two
  *  independent DOMParser passes that could drift apart. */
@@ -178,7 +209,7 @@ async function bootEngine(): Promise<HTMLElement> {
   host.style.cssText = "visibility: hidden; position: fixed; top: 0; left: -99999px;";
   document.body.appendChild(host);
 
-  await Promise.all(STYLESHEETS.map(href => loadStylesheet(shadow, href)));
+  await Promise.all([...STYLESHEETS.map(href => loadStylesheet(shadow, href)), loadIconFont()]);
 
   // Inline, applies synchronously (no load event to await, unlike the <link>s above) — must be in
   // place before boot() runs, since that's what first calls getLeafletMap() and creates its panes.
