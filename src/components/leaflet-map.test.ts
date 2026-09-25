@@ -49,3 +49,24 @@ test("Leaflet's own rendering agrees exactly with #viewbox's manual translate/sc
     expect(leafletStyle.y).toBeCloseTo(viewboxStyle.y, 5);
   }
 });
+
+// Regression test for a severe bug found after this whole migration had already shipped: every
+// burg icon and map marker was 100% invisible and unclickable, everywhere, always. Root cause:
+// legacyPane and .leaflet-map-pane are siblings that both default to z-index 400 (Leaflet's own
+// base `.leaflet-pane` CSS rule) — tied z-index falls back to DOM order, and legacyPane is
+// appended after Leaflet's own map pane, so it (including #ocean's own opaque base rect) painted
+// on top of every layer nested inside .leaflet-map-pane, no matter what z-index those layers set
+// on themselves (states/biomes/rivers/routes/burg-icons/markers, z-index 100-108) — a descendant
+// can never outrank its own ancestor's stacking context. Confirmed with a real browser via
+// elementFromPoint() at a burg icon's own computed position: it returned #oceanPattern's <rect>,
+// not the icon, even though the icon's own position/size were always correct.
+test("the legacy SVG pane paints below Leaflet's own map pane, not above it", () => {
+  const map = getLeafletMap();
+  const legacyPane = document.getElementById("legacyPane");
+  expect(legacyPane).not.toBeNull();
+  // .leaflet-map-pane has no inline z-index of its own — it relies on `.leaflet-pane`'s base CSS
+  // value of 400 (not loaded in jsdom), so this compares against that known constant directly
+  // rather than a computed style jsdom wouldn't resolve the same way a real browser does.
+  expect(Number(legacyPane!.style.zIndex)).toBeLessThan(400);
+  expect(map.getPane("legacySvg")).toBe(legacyPane);
+});

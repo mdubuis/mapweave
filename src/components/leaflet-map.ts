@@ -110,10 +110,29 @@ function ensureContainer(): HTMLDivElement {
 /** Hosts the existing hand-drawn #map SVG in a pane that is a plain sibling of Leaflet's own map
  *  pane (not a child of it), so it gets none of Leaflet's automatic pane transform —
  *  components/zoom.ts keeps driving its translate/scale itself, exactly as it drove the old
- *  d3-zoom transform. Because it is appended after Leaflet's map pane, it paints on top of it. */
+ *  d3-zoom transform.
+ *
+ * `zIndex: 350`, below `.leaflet-map-pane`'s own (unset, so it falls back to `.leaflet-pane`'s
+ * base CSS value of 400) — without this, both panes tie at 400 and DOM order (this one is
+ * appended after Leaflet's own map pane, further down in ensureContainer()) used to decide the
+ * winner, putting the whole legacy SVG — ocean included — on top of every Leaflet-rendered layer
+ * nested inside .leaflet-map-pane (states/biomes/rivers/routes/burg icons/markers, z-index
+ * 100-108), no matter what z-index those layers set on themselves: a descendant can never outrank
+ * its own ancestor's stacking context, only compete within it. Concretely: `#ocean`'s own opaque
+ * base rect, painted at the very start of the legacy SVG, sat directly on top of every burg icon
+ * and map marker everywhere on the map, making the whole point-icon layer 100% invisible and
+ * unclickable — found by comparing computed marker positions (always correct — Leaflet's own
+ * per-marker zoom/pan tracking was never the problem) against `elementFromPoint()` at that exact
+ * spot, which returned `#oceanPattern`'s `<rect>`, not the marker. Landmass's own fill was already
+ * turned transparent for the same reason in an earlier fix (draw-landmass.ts), letting territory
+ * colors show through — but that only helps content sitting where landmass itself is unfilled;
+ * icons need to be genuinely on top, not merely visible through a gap. Confirmed this doesn't dim
+ * legacy-rendered text labels (`#labels`, still part of this same SVG): territory fills already
+ * carry their own transparency, so labels stay legible with the stacking order reversed. */
 function mountLegacySvg(map: L.Map): void {
   const legacyPane = map.createPane("legacySvg", map.getContainer());
   legacyPane.id = "legacyPane";
+  legacyPane.style.zIndex = "350";
 
   const svg = document.getElementById("map");
   if (svg) legacyPane.appendChild(svg);
