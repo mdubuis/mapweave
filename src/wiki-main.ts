@@ -17,6 +17,7 @@ import {
 } from "@/wiki/board";
 import {
   createWikiPage,
+  deleteWikiPage,
   deleteWikiTemplate,
   loadWikiPages,
   loadWikiTemplates,
@@ -853,6 +854,7 @@ function renderEditorView(slug: string): void {
       <button id="save-btn" type="button">Save</button>
       <button id="cancel-btn" type="button">Cancel</button>
       <button id="save-template-btn" type="button">Save as template…</button>
+      <button id="delete-page-btn" type="button" class="danger">Delete page…</button>
     </div>
   `;
 
@@ -913,6 +915,12 @@ function renderEditorView(slug: string): void {
     if (!name?.trim()) return;
     await saveWikiTemplate(API_BASE, name.trim(), textarea.value);
     templates = await loadWikiTemplates(API_BASE);
+  });
+  el<HTMLButtonElement>("delete-page-btn").addEventListener("click", async () => {
+    if (!window.confirm(`Delete "${entity.frontmatter.title}"? This can't be undone.`)) return;
+    await deleteWikiPage(API_BASE, getConnectedMapId()!, slug);
+    await reloadWikiPages();
+    location.hash = "#/";
   });
 }
 
@@ -1240,10 +1248,11 @@ function sendToMapEngine(message: PlacementMessage): void {
  *  (render()) and the "place on map" flow (requestPlacement), which opens the map view directly
  *  without necessarily changing the route, matching its pre-merge behavior.
  *
- * Known gap, deferred on purpose (see MAPWEAVE.md's Phase 6 "Phase 3" entry): doesn't yet pass a
- * DB-connected world's seed/width/height into the engine, so a connected world doesn't auto-load
- * here the way the old iframe's `mapFrameSrc()` made it do — it falls back to whatever the engine
- * itself defaults to (last locally-saved map, or waiting for the user to generate one).
+ * Auto-loads the connected world's own seed/width/height into the engine (map-engine-host.ts's
+ * loadConnectedWorld) — the replacement for the old iframe's `mapFrameSrc()` auto-load, now that
+ * the engine mounts directly instead of via an iframe with those params in its own URL. Skipped
+ * for `newWorld` (see below): that flow wants a blank generation-settings start, not the connected
+ * world auto-loaded underneath it first.
  *
  * `newWorld` is the "create a new world" landing choice (renderChooseWorldView): land on the
  * engine's generation-settings tab instead of the default idle-state "no map yet" prompt. */
@@ -1253,9 +1262,11 @@ async function renderMapView(newWorld?: boolean): Promise<void> {
   // import) — a static import here would pull that into the wiki's own eager entry chunk, shipping
   // it to every visitor whether or not they ever open the map. Confirmed by actually building both
   // ways: the wiki chunk was ~40KB with a dynamic import, 838KB with a static one.
-  const { mountMapEngine, openGenerationSettings } = await import("@/services/map-engine-host");
+  const { mountMapEngine, openGenerationSettings, loadConnectedWorld } = await import("@/services/map-engine-host");
   await mountMapEngine(el<HTMLElement>("map-panel-mount"));
   if (newWorld) await openGenerationSettings();
+  else if (connectedMap)
+    await loadConnectedWorld(connectedMap.id, connectedMap.seed, connectedMap.width, connectedMap.height);
 }
 
 /** A page's "map" tab (Phase 6 "Phase 5" — cross-tab integration, see MAPWEAVE.md): embeds the same
@@ -1263,15 +1274,17 @@ async function renderMapView(newWorld?: boolean): Promise<void> {
  *  the full-screen overlay — resolves the "full inline map embedding lands in Phase 3" placeholder
  *  Phase 2 left behind, now that Phase 3 actually built mountMapEngine() to accept any container.
  *
- *  Same known gap as renderMapView, doubly relevant here: a tab's own `mapId` isn't used to load
- *  that specific database world into the engine (still needs the deferred seed/width/height wiring)
- *  — this always shows whichever world the engine currently has loaded, with a mismatch notice in
- *  the template above when that differs from the tab's declared `mapId`. */
+ *  Same connected-world auto-load as renderMapView. Narrower gap still open, unchanged by this:
+ *  a tab's own declared `mapId` isn't used to load that *specific* database world when it differs
+ *  from the currently connected one — this always shows whichever world is connected, with the
+ *  mismatch notice in the template above covering that case honestly rather than silently. */
 async function mountMapTabView(): Promise<void> {
   const mount = el<HTMLElement>("map-tab-mount");
   if (!mount) return; // the user navigated away before this resolved — nothing to mount into
-  const { mountMapEngine } = await import("@/services/map-engine-host");
+  const { mountMapEngine, loadConnectedWorld } = await import("@/services/map-engine-host");
   await mountMapEngine(mount);
+  if (connectedMap)
+    await loadConnectedWorld(connectedMap.id, connectedMap.seed, connectedMap.width, connectedMap.height);
 }
 
 function cancelPendingPlacement(): void {

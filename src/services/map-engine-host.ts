@@ -273,3 +273,37 @@ export async function openGenerationSettings(): Promise<void> {
   showOptions();
   document.getElementById("optionsTab")?.click();
 }
+
+/** Which Postgres map's data the engine currently shows, if any it loaded itself (never set by a
+ *  manual "New Map"/local file load) — see loadConnectedWorld below. */
+let loadedConnectedMapId: number | undefined;
+let loadInFlight: Promise<void> | undefined;
+
+/** Regenerates the engine's map from a connected Postgres world's own seed/size — the missing half
+ *  of the old iframe's `?seed=&width=&height=` auto-load (mapFrameSrc, removed when the engine
+ *  moved from an iframe to mounting directly, see wiki-main.ts's renderMapView). A no-op if `mapId`
+ *  is already the one loaded, matching the old iframe's own "don't reload if it's still the same
+ *  connected map" behavior — reopening the map view on the same world never regenerates it, so a
+ *  manual "New Map"/local file load the user made afterward isn't silently clobbered just by
+ *  reopening the view. Switching to a *different* connected world, or opening the map view for the
+ *  first time this session, does load it. */
+export async function loadConnectedWorld(mapId: number, seed: string, width?: number, height?: number): Promise<void> {
+  if (loadedConnectedMapId === mapId) return;
+  if (loadInFlight) await loadInFlight; // don't overlap two calls racing in from renderMapView + mountMapTabView
+  if (loadedConnectedMapId === mapId) return; // the call just awaited may already have done this
+
+  // idle-state.ts's overlay only removes itself from its own button's click handler — bypassing
+  // that button (as this does, calling generateMapOnLoad directly) leaves it sitting on top of the
+  // freshly generated map, full-viewport and z-indexed above everything, on a page's very first
+  // boot with nothing else loaded yet. Same removal openGenerationSettings() already does before
+  // its own generation path. A no-op via optional chaining when it was never shown (later loads —
+  // checkLoadParameters only ever shows it once, on first boot).
+  document.getElementById("generateIdleState")?.remove();
+
+  const { generateMapOnLoad } = await import("@/services/url-params");
+  loadInFlight = generateMapOnLoad({ seed, width, height }).then(() => {
+    loadedConnectedMapId = mapId;
+  });
+  await loadInFlight;
+  loadInFlight = undefined;
+}

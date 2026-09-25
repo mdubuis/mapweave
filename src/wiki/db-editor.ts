@@ -87,6 +87,16 @@ async function putPage(apiBase: string, mapId: number, slug: string, raw: string
   }
 }
 
+export async function deleteWikiPage(apiBase: string, mapId: number, slug: string): Promise<void> {
+  const response = await fetch(`${apiBase}/api/maps/${mapId}/wiki/pages/${encodeURIComponent(slug)}`, {
+    method: "DELETE"
+  });
+  if (!response.ok && response.status !== 404) {
+    const body = await response.json().catch(() => ({}) as { error?: string });
+    throw new Error(body.error ?? `DELETE wiki page failed: ${response.status}`);
+  }
+}
+
 export async function saveWikiPage(apiBase: string, mapId: number, slug: string, raw: string): Promise<void> {
   await putPage(apiBase, mapId, slug, raw);
 }

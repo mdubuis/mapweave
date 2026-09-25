@@ -527,6 +527,15 @@ a.world-list-item.create-world:hover {
   display: flex;
   gap: 0.5rem;
 }
+.editor-actions .danger {
+  margin-left: auto;
+  border-color: var(--broken);
+  color: var(--broken);
+}
+.editor-actions .danger:hover {
+  background: var(--broken);
+  color: var(--bg);
+}
 
 #graph-panel {
   position: fixed;
