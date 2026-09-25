@@ -679,15 +679,6 @@ function renderEntityView(slug: string, tabParam?: string): void {
         ? boardSectionHtml(slug, Boolean(canEdit))
         : isMapTab
           ? `<section id="map-tab-panel">
-              ${
-                activeTab?.mapId !== undefined && activeTab.mapId !== getConnectedMapId()
-                  ? `<p id="map-tab-mismatch" class="muted">This tab is linked to map #${activeTab.mapId}, but the ${
-                      getConnectedMapId() !== undefined
-                        ? `currently loaded map is #${getConnectedMapId()}`
-                        : "engine has no database world loaded"
-                    } — showing that below (switching a tab to a specific database world without a full reload isn't wired up yet).</p>`
-                  : ""
-              }
               <div id="map-tab-mount"></div>
             </section>`
           : `<article class="entity-body">${renderMarkdown(body, resolveLink, autoLinkNames)}</article>`
@@ -698,7 +689,7 @@ function renderEntityView(slug: string, tabParam?: string): void {
   if (isEncounterTable) mountEncounterRoller(el<HTMLElement>("encounter-roller"), frontmatter.table!);
   if (isBoard) mountBoardView(slug, entity, Boolean(canEdit));
   if (isBoardTab) mountBoardView(slug, entity, Boolean(canEdit), activeTabId);
-  if (isMapTab) void mountMapTabView();
+  if (isMapTab) void mountMapTabView(activeTab?.mapId);
 
   el<HTMLButtonElement>("place-on-map-btn")?.addEventListener("click", () => {
     const kind = el<HTMLSelectElement>("place-kind").value as PlacementKind;
@@ -917,11 +908,31 @@ function renderEditorView(slug: string): void {
     templates = await loadWikiTemplates(API_BASE);
   });
   el<HTMLButtonElement>("delete-page-btn").addEventListener("click", async () => {
-    if (!window.confirm(`Delete "${entity.frontmatter.title}"? This can't be undone.`)) return;
+    if (!window.confirm(deleteWarning(entity, slug))) return;
     await deleteWikiPage(API_BASE, getConnectedMapId()!, slug);
     await reloadWikiPages();
     location.hash = "#/";
   });
+}
+
+/** Deleting a page doesn't corrupt anything elsewhere — wikilinks/map_ref are soft slug references,
+ *  not foreign keys, so they just stop resolving (a wikilink renders "broken", a map burg's wiki
+ *  icon reverts to "create a page") — but doing that silently is still a bad surprise. Warns about
+ *  both kinds of reference this page might have, using the already-computed `graph` (no separate
+ *  query) for backlinks. */
+function deleteWarning(entity: WikiEntity, slug: string): string {
+  const backlinks = graph.edges.filter(edge => edge.to === slug).length;
+  const placedOnMap = Object.keys(entity.frontmatter.map_ref ?? {}).length > 0;
+
+  const notes: string[] = [];
+  if (backlinks > 0)
+    notes.push(`${backlinks} other page${backlinks === 1 ? "" : "s"} link${backlinks === 1 ? "s" : ""} to it`);
+  if (placedOnMap) notes.push("it's placed on the map");
+
+  const warning = notes.length
+    ? ` ${notes.join(" and ")} — those references will show as broken/unlinked afterward.`
+    : "";
+  return `Delete "${entity.frontmatter.title}"?${warning} This can't be undone.`;
 }
 
 function renderNewEntityView(title: string, mapRef?: MapRef): void {
@@ -1274,17 +1285,37 @@ async function renderMapView(newWorld?: boolean): Promise<void> {
  *  the full-screen overlay — resolves the "full inline map embedding lands in Phase 3" placeholder
  *  Phase 2 left behind, now that Phase 3 actually built mountMapEngine() to accept any container.
  *
- *  Same connected-world auto-load as renderMapView. Narrower gap still open, unchanged by this:
- *  a tab's own declared `mapId` isn't used to load that *specific* database world when it differs
- *  from the currently connected one — this always shows whichever world is connected, with the
- *  mismatch notice in the template above covering that case honestly rather than silently. */
-async function mountMapTabView(): Promise<void> {
+ * `tabMapId`, when the tab declares one (`PageTabMeta.mapId`), loads that *specific* database world
+ * into the engine — even when it differs from whichever one is currently connected — closing the
+ * gap the old "mismatch notice" used to just flag instead of solving. Without one, falls back to
+ * the connected world, same as renderMapView. Since map-engine-host.ts's loadConnectedWorld keys its
+ * "already loaded, skip" cache by mapId (not "the connected one" specifically), leaving this tab and
+ * opening the full map view (always requesting the connected world) correctly reloads back to it —
+ * no stale state leaks across the two entry points. */
+async function mountMapTabView(tabMapId?: number): Promise<void> {
   const mount = el<HTMLElement>("map-tab-mount");
   if (!mount) return; // the user navigated away before this resolved — nothing to mount into
   const { mountMapEngine, loadConnectedWorld } = await import("@/services/map-engine-host");
   await mountMapEngine(mount);
-  if (connectedMap)
-    await loadConnectedWorld(connectedMap.id, connectedMap.seed, connectedMap.width, connectedMap.height);
+
+  try {
+    if (tabMapId !== undefined) {
+      const info = await fetchConnectedMapInfo(API_BASE, tabMapId);
+      await loadConnectedWorld(info.id, info.seed, info.width, info.height);
+    } else if (connectedMap) {
+      await loadConnectedWorld(connectedMap.id, connectedMap.seed, connectedMap.width, connectedMap.height);
+    }
+  } catch (error) {
+    // The user may have navigated away (and #map-tab-mount re-rendered under a later page) while
+    // this was in flight — re-check before touching the DOM, same guard mountMapTabView's caller
+    // already relies on above.
+    if (el<HTMLElement>("map-tab-mount") !== mount) return;
+    const message = error instanceof Error ? error.message : String(error);
+    mount.insertAdjacentHTML(
+      "beforebegin",
+      `<p class="wiki-link-broken">Could not load map #${tabMapId}: ${message}</p>`
+    );
+  }
 }
 
 function cancelPendingPlacement(): void {

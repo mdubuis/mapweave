@@ -836,13 +836,6 @@ button:hover {
   border-radius: var(--radius);
   overflow: hidden;
 }
-#map-tab-mismatch {
-  flex: none;
-  padding: 0.6rem 1rem;
-  text-align: center;
-  background: var(--bg-alt);
-  border-bottom: 1px solid var(--border);
-}
 #map-tab-mount {
   flex: 1;
   min-height: 0;
